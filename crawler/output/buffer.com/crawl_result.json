@@ -1,0 +1,175 @@
+{
+  "domain": "buffer.com",
+  "crawled_at": "2026-09-08T06:26:40.614110+00:00",
+  "status": "ok",
+  "pages": [
+    {
+      "url": "https://buffer.com",
+      "page_type": "home",
+      "text": "With its new features and updates, LinkedIn is becoming a social media platform that you shouldn't overlook, especially if you are a B2B professional or B2B marketer.\nBenefits\nSchedule your posts\nQueue up and schedule your LinkedIn content in advance.\nAnalyze key metrics\nMeasure post engagement and page growth to double-down on what works.\nSave and brainstorm\nManage all your ideas in a single hub, and get AI help generating new ones.\nCross-post to any platform\nBuild your brand and share your content beyond LinkedIn in a single click.\nYour launchpad for LinkedIn success\nBuffer's tools for LinkedIn go beyond just scheduling. Explore how our advanced features can make creating and managing your LinkedIn Profiles and Pages so much simpler.\nSchedule\nScheduled posts, on your schedule\nPlan and schedule your text, image, carousel, PDF, video, and link preview posts in advance. Stay consistent and on-brand, and say goodbye to daily posting hassles.\nLearn\nLearn what your audience loves\nUnderstand what works and what doesn't with Buffer's comprehensive LinkedIn analytics. Get in-depth insights into your post and page performance, helping you fine-tune your content for what your audience likes best.\nCreate\nSmart content ideas at your fingertips\nOrganize all of your post ideas in one hub and use AI to generate content ideas, craft compelling posts, and even suggest relevant hashtags.\nResources\nNew to LinkedIn? Let's get you started\nCurious about why you should add LinkedIn to your social stack? And how to really make an impact on the platform? We've got you covered.\nWe analyzed over 1 million posts sent through Buffer to pinpoint the best time and day to post on LinkedIn for maximum reach.",
+      "chars": 1705,
+      "low_content": false
+    },
+    {
+      "url": "https://buffer.com/insights",
+      "page_type": "blog",
+      "text": "With its new features and updates, LinkedIn is becoming a social media platform that you shouldn't overlook, especially if you are a B2B professional or B2B marketer.\nBenefits\nSchedule your posts\nQueue up and schedule your LinkedIn content in advance.\nAnalyze key metrics\nMeasure post engagement and page growth to double-down on what works.\nSave and brainstorm\nManage all your ideas in a single hub, and get AI help generating new ones.\nCross-post to any platform\nBuild your brand and share your content beyond LinkedIn in a single click.\nYour launchpad for LinkedIn success\nBuffer's tools for LinkedIn go beyond just scheduling. Explore how our advanced features can make creating and managing your LinkedIn Profiles and Pages so much simpler.\nSchedule\nScheduled posts, on your schedule\nPlan and schedule your text, image, carousel, PDF, video, and link preview posts in advance. Stay consistent and on-brand, and say goodbye to daily posting hassles.\nLearn\nLearn what your audience loves\nUnderstand what works and what doesn't with Buffer's comprehensive LinkedIn analytics. Get in-depth insights into your post and page performance, helping you fine-tune your content for what your audience likes best.\nCreate\nSmart content ideas at your fingertips\nOrganize all of your post ideas in one hub and use AI to generate content ideas, craft compelling posts, and even suggest relevant hashtags.\nResources\nNew to LinkedIn? Let's get you started\nCurious about why you should add LinkedIn to your social stack? And how to really make an impact on the platform? We've got you covered.\nWe analyzed over 1 million posts sent through Buffer to pinpoint the best time and day to post on LinkedIn for maximum reach.",
+      "chars": 1705,
+      "low_content": false
+    },
+    {
+      "url": "https://buffer.com/resources/",
+      "page_type": "blog",
+      "text": "I’ve been fortunate that we've closed down for the last week of the year for the last eight years that I’ve been at Buffer. We kicked off this at the end of 2016 and have kept up every year since then.\nClosing down for the last week of the year is an opportunity to pause and recharge. It’s like a reset, except across the whole company. I love telling people about this practice at Buffer because they have so many questions about how we continue to operate while closing down for a week.\nAs we work with many small businesses and creators who can sometimes struggle with working over the holidays, it feels especially important to share how we’re going about this.\nSo in this post, I’ll cover what it means to close down for a week as a business whose customers are always using it, why we do it, and specifically how our largest teams manage this time off while still caring for our product and our customers.\nLet’s dive in!\nWhat does it mean to close down for a week?\nAt the end of every year, we close down for the year's final week. The exact definition of “closed down” varies from company to company – some businesses will completely shut down operations while others will only close particular sections of their business.\nThis gives everyone at the company some extra time to rest, and it creates an environment where no one is worried about missing out on projects or updates while they’re offline because we’re all offline. We’ve done this sort of thing before, closing down for an extra long weekend in the summer, and it’s always been refreshing for our team.\nWhen I say that we’re closed, that means that most of the company is off (I’ll elaborate in the next section), we aren’t releasing new features or changing our product at all, we aren’t publishing new blog posts, and it is intentionally a time of rest.\nIn our business, creating tools for small businesses and creators building a brand online, this time of year is also reliably slow. So unlike some other industries that may pick up over the holidays, we can lean into rest by closing the company during a naturally slower period.\nWhat does this look like in practice?\nFor most teams at Buffer, closing for the holidays means a full disconnect. Our two largest teams, Engineering and Customer Advocacy have to create systems where we can still serve our customers and ensure Buffer is operational while also making space for additional rest. So here’s how Engineering and Advocacy tackle the week off.\nHow our Advocacy team handles a week closed\nOur Advocacy team is a group of absolute pros who are taking care of our customers. This year, they’ve helped solve over 50,000 customer support requests and sent over 105,000 replies with an average first response time of just four hours, 38 minutes (business hours).\nOver the years that we have been closing, they have figured out the right balance to ensure we can still help customers while also giving our Advocates that extra rest.\nTo start, we take steps to make this period visible to our customers. They post a clear message stating that we’re shut down for the holidays in all the main channels where we communicate with customers. Those include a banner for people who are in Buffer, an auto-reply to customer support email, a pinned tweet on our account, and several other places.\nThis year, the message reads:\nThe Buffer team is observing a company-wide holiday shutdown from December 24 to January 1. While our response times will be a little slower than usual, a dedicated crew of Customer Advocates are working as quickly as possible to respond to customer messages. Happy Holidays! ✨\nEach Advocate is working one full day or two half days. We stagger our coverage across the close-down period to ensure we have the optimal number of people online on the days we expect to be busiest.\nThis year, we have people online on Dec 24, we have a few hours of coverage on Dec 25, and we have people online on Jan 1. We ask all Advocates to work full weeks (five days) in the two weeks following the holiday period to ensure we kick off the new year with the inbox in great shape and customers being helped as quickly as possible.\nThe team has in place a clear schedule, expectations when people are online with how to prioritize their work and get back to customers, and guidelines for emergencies. (We have those guidelines in place all the time, but it’s always good to review ahead of the holidays.)\nHow our Engineering team handles a week closed\nSimilar to Advocacy, for our engineers, we need to have some coverage of engineers who are on call in case something happens.\nFor Engineering, their break looks different because they are on call, meaning they are available if something breaks, rather than fully online during this time. That means that the load of being on call can be spread among fewer people because the likelihood of them needing to be online is lower.\nThe way that the on-call schedule works is that there are several specialized or senior members of the team who are immediately placed in all of the on-call spots. Then we ask for volunteers from the rest of the engineering team to be on-call throughout the week.\nA few questions from our community about closing down for a week\nWe reached out on social media to see what questions people had about closing down for a week, and we got a few good questions. Here’s our response:\nDo clients find this frustrating or ever complain?\nWe haven’t heard major complaints or frustration about this in the past, and if ever things have not gone as planned, we’ve adjusted our plan for the following year. We make sure to be very transparent that we’re taking this time off across our communication channels. We still have our Advocacy team spending some time online and can reply to anything urgent.\nDid this impact your bottom line at all?\nNo, we intentionally choose a slow time for us to be closed. So it’s the right time to take a break without any major impact. In addition, since the Advocacy team is still monitoring for urgent customer requests and the Engineering team is on call, we can still jump on any issues that pop up, and our customers still have support.\nI’d love to know about the benefits your company has seen and how it positively impacts employees!\nThe biggest benefit we’ve seen from closing down for the holidays is that our team is more rested and refreshed. It’s a unique opportunity for everyone at Buffer to take a break, rather than it happening in spots throughout the year. It means the energy levels in the first few weeks of the year are always really high for us.\nTaking this week off for all of us at once also gives us a greater opportunity to relax because no one needs to think about projects that are moving forward without them or missing out on team communication. After all, we’re all offline. This is great for us as a team, which translates into being great for our product and our customers.\nDo you take breaks from work or your business, and if so, what’s your approach? We’d love to hear from you on Bluesky or Discord.",
+      "chars": 7060,
+      "low_content": false
+    },
+    {
+      "url": "https://buffer.com/pricing",
+      "page_type": "services",
+      "text": "With its new features and updates, LinkedIn is becoming a social media platform that you shouldn't overlook, especially if you are a B2B professional or B2B marketer.\nBenefits\nSchedule your posts\nQueue up and schedule your LinkedIn content in advance.\nAnalyze key metrics\nMeasure post engagement and page growth to double-down on what works.\nSave and brainstorm\nManage all your ideas in a single hub, and get AI help generating new ones.\nCross-post to any platform\nBuild your brand and share your content beyond LinkedIn in a single click.\nYour launchpad for LinkedIn success\nBuffer's tools for LinkedIn go beyond just scheduling. Explore how our advanced features can make creating and managing your LinkedIn Profiles and Pages so much simpler.\nSchedule\nScheduled posts, on your schedule\nPlan and schedule your text, image, carousel, PDF, video, and link preview posts in advance. Stay consistent and on-brand, and say goodbye to daily posting hassles.\nLearn\nLearn what your audience loves\nUnderstand what works and what doesn't with Buffer's comprehensive LinkedIn analytics. Get in-depth insights into your post and page performance, helping you fine-tune your content for what your audience likes best.\nCreate\nSmart content ideas at your fingertips\nOrganize all of your post ideas in one hub and use AI to generate content ideas, craft compelling posts, and even suggest relevant hashtags.\nResources\nNew to LinkedIn? Let's get you started\nCurious about why you should add LinkedIn to your social stack? And how to really make an impact on the platform? We've got you covered.\nWe analyzed over 1 million posts sent through Buffer to pinpoint the best time and day to post on LinkedIn for maximum reach.",
+      "chars": 1705,
+      "low_content": false
+    },
+    {
+      "url": "https://buffer.com/about",
+      "page_type": "about",
+      "text": "About us\nWe’re Buffer\nWe’re an optimistic and gratitude-filled group of remote workers scattered around the world and dedicated to creating a product our customers will use and love. Read on to learn more about Buffer’s story and history and see the full Buffer team.\nA team of real people\nWe’re committed to building a diverse team and a work environment that’s inclusive of people of all backgrounds. Get to know the wonderful team who’s building our product, supporting our customers, and creating educational content.\nCEO & Co-Founder\nChicago, Illinois, USA\nStaff Engineer\nSan Francisco, California, USA\nChief of Staff\nPortland, Oregon, USA\nVP of Customer Advocacy\nSydney, Australia\nSenior Escalations Manager\nWesley Chapel, Florida, USA\nSenior Platform Engineer\nTaipei, Taiwan\nSenior Customer Advocate\nBrighton, UK\nSenior Customer Advocate\nNomad\nSenior Engineer\nMadrid, Spain\nStaff Engineer\nLa Rochelle, France\nSenior Technical Customer Advocate\nManchester, UK\nSenior Customer Advocate\nPennsylvania, USA\nSenior Customer Advocacy Manager\nLouisville, Kentucky, USA\nSenior Product Marketing Manager\nSydney, Australia\nSenior Customer Advocate\nLondon, UK\nSenior Customer Advocacy Manager\nColorado, USA\nHead of Customer Advocacy Operations\nBrighton, UK\nSenior Engineer\nColombo, Sri Lanka\nSenior Engineer\nWexford, Ireland\nDirector of Communications & Content\nRaleigh, North Carolina, USA\nSenior Customer Advocate\nBarcelona, Spain\nVP of Finance & Operations\nLouisville, Kentucky, USA\nSenior Engineer\nVancouver, BC, Canada\nSenior Customer Advocate\nBonners Ferry, Idaho, USA\nStaff Engineer\nBrighton, UK\nSenior Customer Advocate\nMontana, USA\nSenior Customer Advocate\nOregon, USA\nSenior Engineer\nBarcelona, Spain\nSenior Engineer\nAlicante, Spain\nSenior Accountant\nJacksonville, Florida, USA\nSenior Product Manager\nNomad\nSenior Engineer\nGorredijk, Netherlands\nSenior Customer Advocate\nBandar Seri Begawan, Brunei\nSoftware Engineer\nNew York, New York, USA\nStaff Product Manager\nBrighton, UK\nTechnical Customer Advocate\nTema, Ghana\nSenior Engineer\nMadrid, Spain\nSenior Platform Engineer\nCairo, Egypt\nSenior Engineer\nWarsaw, Poland\nSenior Engineer\nGoes, Netherlands\nSenior Product Designer\nBarcelona, Spain\nSoftware Engineer\nCairns, Australia\nSenior Product Designer\nCasablanca, Morocco\nCustomer Advocate\nLos Angeles, California, USA\nSenior People Ops Specialist\nWest Olive, Michigan, USA\nCustomer Advocate\nNakhon Ratchasima, Thailand\nDirector of Growth Marketing\nVancouver, Canada\nSenior Content Creator\nLagos, Nigeria\nSenior Engineer\nLagos, Nigeria\nSenior Engineer\nNashville, Tennessee, USA\nSoftware Engineer\nMadrid, Spain\nSenior Product Designer\nValletta, Malta\nStaff Product Manager\nMassachusetts, USA\nMarketing UX Designer\nEdinburgh, Scotland, UK\nSenior Engineering Manager\nPoznań, Poland\nDirector of Product Engineering\nTallinn, Estonia\nSenior Content Creator\nCape Town, South Africa\nSenior Product Designer\nPoznań, Poland\nSenior Engineer\nBarcelona, Spain\nSenior Engineer\nPoznań, Poland\nOperations Manager\nNashville, Tennessee, USA\nSenior Lifecycle Marketing Manager\nBrooklyn, New York, USA\nSenior Brand and Community Manager\nEverett, Massachusetts, USA\nStaff Product Manager\nVancouver, BC, Canada\nSenior Growth Marketing Manager\nBrest, France\nSenior Engineer\nHaltern am See, Germany\nSenior Engineer\nBoquete, Chiriqui, Panama\nSenior Engineer\nTallinn, Estonia\nCustomer Advocate\nHeredia, Costa Rica\nSenior Engineer\nBarcelona, Spain\nEngineering Manager\nBrussels, Belgium\nEngineering Manager\nPaola, Malta\nSenior Developer Advocate\nLisbon, Portugal\nSenior Engineer\nMadrid, Spain\nSenior Operations & Automation Specialist\nEriceira, Portugal\nSenior Data Scientist\nCantabria, Spain\nSenior Product & Data Engineer\nCape Town, South Africa\nOpen roles\nPlease be aware: we’ve received a few concerning reports that scammers are falsely using Buffer’s name and reaching out to people about fake job opportunities. We post all open roles here, and only accept job applications through the forms on this page.\nBe the first to know about new roles at Buffer\nOur values\nEarly into Buffer’s journey, our Founder and CEO, Joel Gascoigne, read the book How to Win Friends and Influence People by Dale Carnegie. The book had a huge impact on Joel’s life and what Buffer would become. We have based several of Buffer’s values directly on the principles Carnegie proposes.\nDefault to transparency\nOur true North Star. Transparency is the value we’re best known for, and yet, still very aspirational. We aspire to always default to transparency as a company and as individuals in our decisions and actions.\nHow we default to transparency\n- We choose transparency as a lifestyle of authenticity and honesty, as well as an effective way to work remotely and establish a culture of trust.\n- We believe our transparency will help others as well.\n- We share early in the decision process to avoid “big revelations.”\n- We strive to make all communication clear and avoid making assumptions.\nImprove consistently\nImproving consistently is about striving to be better, not in competition with anyone but our yesterday selves. We are committed to working every day toward personal and professional growth.\nHow we improve consistently\n- We try to make Buffer a little bit better every day in whatever domain we can.\n- We choose to be where we are the happiest and most productive.\n- We desire to be better every day and know that improvement can be found in small changes.\n- We strive to exemplify a growth mindset and believe that any skill or talent can be learned through practice.\nBe a no-ego doer\nWe don’t attach our personal selves to ideas. We remove ourselves—our fears, our pride—from our work to lead to a better, more productive experience for us and everyone around us. We’re all rowing this boat together.\nHow we are no-ego doers\n- We consider the bigger picture and practice humility, knowing our work goes beyond ourselves.\n- We are adaptable and comfortable making decisions and working in uncertainty.\n- We advocate for diverse perspectives to make our team and products stronger.\n- We have a bias towards action. Done well today is better than done perfectly next week.\nShow gratitude\nThis value is deeply ingrained in our culture. We regularly show gratitude for each other, for the technology to make this company and life possible, and for the many blessings that Buffer brings to our lives.\nHow we show gratitude\n- We regularly demonstrate gratitude for our circumstances.\n- We approach customer conversations with the knowledge that it’s a privilege to serve them.\n- We are grateful for the work teammates do to push the company forward.\n- We view it as our duty to give back to help others the way we’ve been supported by many individuals, platforms, and communities.\nChoose optimism\nChoosing optimism is foundational to Buffer’s kind and joyful culture. Optimism helps us look to the future with positivity, while embracing hard conversations and decisions in service of Buffer’s health and future.\nHow we choose optimism\n- We strive to approach everything with optimism about the potential outcome.\n- We assume the best of others because we may lack full context.\n- We believe that constructive, honest feedback is an investment in growth.\n- We push through any artificial harmony.\n- We find joy and fun in the ups and downs of startup life.\nReflect to unblock\nWe carve out time for reflection in order to unblock ourselves. We believe personal growth stems from vulnerability and introspection as we focus on ongoing self-improvement.\nHow we reflect to unblock\n- We deliberately find time for reflection; we believe this is where life-changing adjustments come from.\n- We find the time to jump out of the trenches into higher-level thinking that will move the needle.\n- We understand the value of patience and treat it as a muscle, which needs practice to grow.\nOur Story\nBuffer started as a Startup Sprint project in November 2010 to solve a problem our Founder and CEO Joel Gascoigne was experiencing — he wanted to space out when his tweets were sent. The idea gained hundreds of users within the first few months and eventually grew to add social networks, to go beyond purely publishing to social media into analytics, engagement, and even to building micro sites. Today, Buffer is one of the most well-known social media marketing tools serving small businesses, creators, and individuals.\nThe Buffer team was initially just a few people working on a project they believed in, and steadily started growing after the founders joined an accelerator in August 2011. Over the next few years, Buffer teammates joined from wherever they were based as Buffer’s founders traveled and built Buffer. In 2013, we decided to commit to being a fully remote and distributed team, giving up our office space. That decision marked just one example of the Buffer team choosing our own path with how we operate as we build Buffer. We also share the whole team’s salaries, part of our value of transparency, and our whole company works a four-day work week.\nAll that to say, Buffer is a product built to help our customers get off the ground and grow via organic marketing, and the Buffer team is an optimistic and gratitude-filled group of remote workers scattered around the world and dedicated to creating a product our customers will use and love.\nAbout us\nWe are an open company\nSince 2013, we’ve shared Buffer’s finances, team salaries, and other key metrics openly. Our commitment to transparency is rooted in our belief that it fosters trust, keeps us accountable, and helps drive positive change within our industry.\n- MAUMonthly active users\n- 253,931\n- Total customersTotal customers\n- 80,940\n- TeammatesAcross 15 countries\n- 73\n- ARRAnnual recurring revenue\n- $26.4M",
+      "chars": 9751,
+      "low_content": false
+    },
+    {
+      "url": "https://buffer.com/journey",
+      "page_type": "careers",
+      "text": "What is Buffer?\nWe’re a small team on a mission to help innovative companies grow their businesses – and along the way, we’re championing a more human way to work.\nBuffer was started in 2010 as a simple way to schedule posts on Twitter. Today it’s a growing suite of tools now serving more than 75,000 customers.\nUnited by our values\nWe’re building a company that’s focused not just on the bottom line, but also on the happiness of our customers and team. Here are the values that guide our decisions and actions:\nDefault to transparency\nOur true North Star. Transparency is the value we’re best known for, and yet, still very aspirational. We aspire to always default to transparency as a company and as individuals in our decisions and actions.\nHow we default to transparency\n- We choose transparency as a lifestyle of authenticity and honesty, as well as an effective way to work remotely and establish a culture of trust.\n- We believe our transparency will help others as well.\n- We share early in the decision process to avoid “big revelations.”\n- We strive to make all communication clear and avoid making assumptions.\nImprove consistently\nImproving consistently is about striving to be better, not in competition with anyone but our yesterday selves. We are committed to working every day toward personal and professional growth.\nHow we improve consistently\n- We try to make Buffer a little bit better every day in whatever domain we can.\n- We choose to be where we are the happiest and most productive.\n- We desire to be better every day and know that improvement can be found in small changes.\n- We strive to exemplify a growth mindset and believe that any skill or talent can be learned through practice.\nBe a no-ego doer\nWe don’t attach our personal selves to ideas. We remove ourselves—our fears, our pride—from our work to lead to a better, more productive experience for us and everyone around us. We’re all rowing this boat together.\nHow we are no-ego doers\n- We consider the bigger picture and practice humility, knowing our work goes beyond ourselves.\n- We are adaptable and comfortable making decisions and working in uncertainty.\n- We advocate for diverse perspectives to make our team and products stronger.\n- We have a bias towards action. Done well today is better than done perfectly next week.\nShow gratitude\nThis value is deeply ingrained in our culture. We regularly show gratitude for each other, for the technology to make this company and life possible, and for the many blessings that Buffer brings to our lives.\nHow we show gratitude\n- We regularly demonstrate gratitude for our circumstances.\n- We approach customer conversations with the knowledge that it’s a privilege to serve them.\n- We are grateful for the work teammates do to push the company forward.\n- We view it as our duty to give back to help others the way we’ve been supported by many individuals, platforms, and communities.\nChoose optimism\nChoosing optimism is foundational to Buffer’s kind and joyful culture. Optimism helps us look to the future with positivity, while embracing hard conversations and decisions in service of Buffer’s health and future.\nHow we choose optimism\n- We strive to approach everything with optimism about the potential outcome.\n- We assume the best of others because we may lack full context.\n- We believe that constructive, honest feedback is an investment in growth.\n- We push through any artificial harmony.\n- We find joy and fun in the ups and downs of startup life.\nReflect to unblock\nWe carve out time for reflection in order to unblock ourselves. We believe personal growth stems from vulnerability and introspection as we focus on ongoing self-improvement.\nHow we reflect to unblock\n- We deliberately find time for reflection; we believe this is where life-changing adjustments come from.\n- We find the time to jump out of the trenches into higher-level thinking that will move the needle.\n- We understand the value of patience and treat it as a muscle, which needs practice to grow.\nWhat is the Buffer team like?\nBuffer is an equal opportunity employer that has the awesome opportunity to add teammates from anywhere in the world! We’re united by Buffer’s values, and we celebrate our unique differences.\nWhat kind of people work at Buffer? All kinds! We hire talented teammates from a wide variety of backgrounds and experiences, and we’re committed to a work environment of respect and kindness.\nPerks and benefits\nOur focus with perks and benefits is to offer everything teammates need to do their best, healthiest work and keep developing their craft.\nWork remotely\nLive and work wherever you are the happiest and most productive!\n4-Day workweeks\nOur schedule is four workdays, with a flexible, meeting-free fifth day for overflow tasks or personal time as you see fit.\nHealth insurance\nWe offer health insurance for all of our team members, international or US.\nHome office setup\nGet $1000 to set up your home office!\nGrowth mindset fund\nExtra money each year for learning and development.\nNew laptop\nGet a powerful new laptop or PC from your first day at Buffer and every 3 years after.\nUnlimited free books\nGet a free Kindle and all the digital or audio books you like, no questions asked.\nAI tools stipend\nLevel up your work with the latest AI tools.\nFlexible time off\nNo set limits. Take the time you need to rest and recharge.\nSavings plan\nWith 3% company match.\nProfit sharing\nWhen the company does well, all team members share the profits.\nFamily leave\n16 weeks of family leave for all parents, fully paid.\nFamily support fund\nA stipend for each kiddo.\nWorking smarter stipend\nExtra funds for a coworking space or some coffee shop treats.\nSabbaticals\nTake a 6-week break, fully paid, after every 5 years with Buffer.\nOpen roles\nPlease be aware: we’ve received a few concerning reports that scammers are falsely using Buffer’s name and reaching out to people about fake job opportunities. We post all open roles here, and only accept job applications through the forms on this page.\nBe the first to know about new roles at Buffer\nAbout us\nWe are an open company\nSince 2013, we’ve shared Buffer’s finances, team salaries, and other key metrics openly. Our commitment to transparency is rooted in our belief that it fosters trust, keeps us accountable, and helps drive positive change within our industry.\n- MAUMonthly active users\n- 253,931\n- Total customersTotal customers\n- 80,940\n- TeammatesAcross 15 countries\n- 73\n- ARRAnnual recurring revenue\n- $26.4M",
+      "chars": 6503,
+      "low_content": false
+    }
+  ],
+  "emails": [],
+  "team_members": [
+    {
+      "name": "Joel Gascoigne",
+      "title": "Founder"
+    },
+    {
+      "name": "Andy Yates",
+      "title": "Staff Engineer"
+    },
+    {
+      "name": "Carolyn Kopprasch",
+      "title": "VP of Customer Advocacy"
+    },
+    {
+      "name": "Adam Farmer",
+      "title": "Senior Escalations Manager"
+    },
+    {
+      "name": "Steven Cheng",
+      "title": "Senior Platform Engineer"
+    },
+    {
+      "name": "Dave Chapman",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Octa Aburto",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Phil Miguet",
+      "title": "Staff Engineer"
+    },
+    {
+      "name": "Danny Mulcahy",
+      "title": "Senior Technical Customer Advocate"
+    },
+    {
+      "name": "Kelly Vass",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Ross Parmly",
+      "title": "Senior Customer Advocacy Manager"
+    },
+    {
+      "name": "Mike Eckstein",
+      "title": "Senior Product Marketing Manager"
+    },
+    {
+      "name": "Juliet Chen",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Darcy Peters",
+      "title": "Senior Customer Advocacy Manager"
+    },
+    {
+      "name": "Hannah Voice",
+      "title": "Head of Customer Advocacy Operations"
+    },
+    {
+      "name": "Adnan Issadeen",
+      "title": "Senior Engineer"
+    },
+    {
+      "name": "Mick Mahady",
+      "title": "Senior Engineer"
+    },
+    {
+      "name": "Hailley Griffis",
+      "title": "Director of Communications & Content"
+    },
+    {
+      "name": "Julia Cummings",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Jenny Terry",
+      "title": "VP of Finance & Operations"
+    },
+    {
+      "name": "Hamish Macpherson",
+      "title": "Senior Engineer"
+    },
+    {
+      "name": "Joe Birch",
+      "title": "Staff Engineer"
+    },
+    {
+      "name": "Jess Williams",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Nate Hanson",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Maya Uribe",
+      "title": "Senior Engineer"
+    },
+    {
+      "name": "Eduardo Esclapes",
+      "title": "Senior Engineer"
+    },
+    {
+      "name": "Diego Sanchez",
+      "title": "Senior Product Manager"
+    },
+    {
+      "name": "Dinos Theodorou",
+      "title": "Senior Engineer"
+    },
+    {
+      "name": "Mel Poh",
+      "title": "Senior Customer Advocate"
+    },
+    {
+      "name": "Dace Willmott",
+      "title": "Software Engineer"
+    }
+  ],
+  "total_chars": 28429,
+  "duration_sec": 54.61,
+  "error": null
+}

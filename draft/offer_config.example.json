@@ -1,0 +1,23 @@
+{
+  "_comment": "EXAMPLE ONLY -- copy this file to offer_config.json and replace every field with your real business details. draft.py refuses to run on unfilled placeholder text.",
+
+  "your_company_name": "Acme Consulting",
+  "sender_name": "Jane Doe",
+
+  "what_you_sell": "onboarding software that gets new B2B SaaS customers to their first value moment in days instead of weeks",
+
+  "icp_description": "B2B SaaS companies with 20-200 employees who are actively scaling their sales or customer success team",
+
+  "proof_points": [
+    {
+      "claim": "cut onboarding time in half",
+      "detail": "for a 40-person sales org at a Series B SaaS company"
+    },
+    {
+      "claim": "reduced support tickets by 30% in the first 90 days",
+      "detail": "for a mid-market fintech customer"
+    }
+  ],
+
+  "cta_style": "soft, interest-based question (e.g. 'worth a look?') -- never a hard meeting-time ask in email 1, no calendar link until the recipient shows interest"
+}

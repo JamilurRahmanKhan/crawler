@@ -1,0 +1,27 @@
+[
+  {
+    "name": "sales1@yourdomain.com",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "sales1@yourdomain.com",
+    "smtp_password": "app-password-1",
+    "warmup_start_date": "2026-08-01"
+  },
+  {
+    "name": "sales2@yourdomain.com",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "sales2@yourdomain.com",
+    "smtp_password": "app-password-2",
+    "warmup_start_date": "2026-08-15"
+  },
+  {
+    "name": "sales3@tryyourdomain.com",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "sales3@tryyourdomain.com",
+    "smtp_password": "app-password-3",
+    "warmup_start_date": "2026-09-01",
+    "daily_cap_override": 15
+  }
+]

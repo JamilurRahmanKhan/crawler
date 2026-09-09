@@ -1,0 +1,14 @@
+# orchestrator.py itself needs nothing beyond the standard library --
+# it imports each stage's real module in-process (sys.path tricks, no pip
+# package of its own). Install each stage's own requirements.txt instead:
+#
+#   pip install -r ../hygiene/requirements.txt
+#   pip install -r ../crawler/requirements.txt
+#   pip install -r ../analyze/requirements.txt
+#   pip install -r ../contacts/requirements.txt
+#   pip install -r ../draft/requirements.txt
+#   pip install -r ../qa_gate/requirements.txt
+#   pip install -r ../sender/requirements.txt
+#   pip install -r ../feedback/requirements.txt
+#
+# (playwright additionally needs: playwright install chromium)

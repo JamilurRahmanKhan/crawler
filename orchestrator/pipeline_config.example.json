@@ -1,0 +1,18 @@
+{
+  "_comment": "EXAMPLE ONLY -- copy to pipeline_config.json and fill in your real values. Never commit a real api_key here; use --api-key or the ANTHROPIC_API_KEY env var instead and leave this field out.",
+
+  "input_csv": "leads.csv",
+  "url_column": "website",
+  "work_dir": "pipeline_run",
+  "offer_config": "../draft/offer_config.json",
+  "sender_db": "../sender/sender_state.db",
+
+  "workers": 2,
+  "verify_smtp": false,
+  "with_feedback": true,
+  "few_shot_limit": 5,
+
+  "mailboxes": null,
+  "limit": null,
+  "skip_preflight": false
+}

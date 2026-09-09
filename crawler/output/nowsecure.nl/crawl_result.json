@@ -1,0 +1,11 @@
+{
+  "domain": "nowsecure.nl",
+  "crawled_at": "2026-09-08T06:37:45.464870+00:00",
+  "status": "crawl_failed",
+  "pages": [],
+  "emails": [],
+  "team_members": [],
+  "total_chars": 0,
+  "duration_sec": 5.05,
+  "error": "no extractable text, emails, or named people found on any reachable page"
+}

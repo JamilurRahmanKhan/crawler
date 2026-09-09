@@ -1,0 +1,30 @@
+{
+  "domain": "basecamp.com",
+  "processed_at": "2026-09-08T08:22:08.085519+00:00",
+  "status": "ok",
+  "contacts": [
+    {
+      "email": "jason@basecamp.com",
+      "role": "other",
+      "matched_name": "Jason Fried",
+      "matched_title": "co-founder",
+      "source": "scraped",
+      "verification": "not_checked",
+      "verification_note": "SMTP verification disabled (--verify-smtp not passed)",
+      "confidence": "medium",
+      "linkedin_lookup_url": "https://www.google.com/search?q=%22Jason+Fried%22+basecamp.com+site%3Alinkedin.com%2Fin"
+    },
+    {
+      "email": "nonprofits@basecamp.com",
+      "role": "other",
+      "matched_name": null,
+      "matched_title": null,
+      "source": "scraped",
+      "verification": "not_checked",
+      "verification_note": "SMTP verification disabled (--verify-smtp not passed)",
+      "confidence": "medium",
+      "linkedin_lookup_url": null
+    }
+  ],
+  "smtp_probing_enabled": false
+}

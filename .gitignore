@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# real credentials/state, never commit
+.env
+*.env
+!*.env.example
+*.db
+*_state.db
+
+# real business config, never commit -- example files are tracked
+offer_config.json
+mailboxes.json
+pipeline_config.json
+
+# generated pipeline run artifacts
+pipeline_run/
+queue.json
+queue_passed.json
+manual_review.csv
+qa_review_state.json
+few_shot.json
+hygiene_kept.csv
+hygiene_dropped.csv

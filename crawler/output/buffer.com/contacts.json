@@ -1,0 +1,30 @@
+{
+  "domain": "buffer.com",
+  "processed_at": "2026-09-08T06:27:36.103041+00:00",
+  "status": "ok",
+  "contacts": [
+    {
+      "email": "carolyn@buffer.com",
+      "role": "other",
+      "matched_name": "Carolyn Kopprasch",
+      "matched_title": "VP of Customer Advocacy",
+      "source": "pattern_bruteforce_verified",
+      "verification": "valid",
+      "verification_note": "RCPT 250 from aspmx.l.google.com",
+      "confidence": "high",
+      "linkedin_lookup_url": "https://www.google.com/search?q=%22Carolyn+Kopprasch%22+buffer.com+site%3Alinkedin.com%2Fin"
+    },
+    {
+      "email": "hannah.voice@buffer.com",
+      "role": "personal",
+      "matched_name": "Hannah Voice",
+      "matched_title": "Head of Customer Advocacy Operations",
+      "source": "pattern_bruteforce_verified",
+      "verification": "valid",
+      "verification_note": "RCPT 250 from aspmx.l.google.com",
+      "confidence": "high",
+      "linkedin_lookup_url": "https://www.google.com/search?q=%22Hannah+Voice%22+buffer.com+site%3Alinkedin.com%2Fin"
+    }
+  ],
+  "smtp_probing_enabled": true
+}
