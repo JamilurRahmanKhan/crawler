@@ -8,6 +8,7 @@ python orchestrator.py --config pipeline_config.json
 """
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -122,8 +123,10 @@ DEFAULT_CONFIG = {
 
 def _model_kwarg(config: dict) -> dict:
     """Only pass model= through when explicitly configured, so each stage
-    keeps its own DEFAULT_MODEL (draft.py deliberately uses a different
-    writer model than the sonnet used for analyze/qa_gate/feedback)."""
+    keeps its own DEFAULT_MODEL. All four LLM-calling stages now share one
+    free-tier Gemini flash model (see draft.py's DEFAULT_MODEL comment --
+    Gemini's Pro-tier models carry a hard 0-request free quota, confirmed
+    live, so the original writer/judge model split isn't available at $0)."""
     return {"model": config["model"]} if config.get("model") else {}
 
 
@@ -205,9 +208,12 @@ def run_pipeline(config: dict) -> dict:
                 few_shot_path=few_shot_path, **_model_kwarg(config))
 
         elif stage == "qa_gate":
+            # same offer_config draft already requires -- enables qa_gate's
+            # judge-feedback redraft loop automatically, no second config key
             results["qa_gate"] = qa_gate_module.run_batch(
                 paths["queue"], paths["crawl_dir"], paths["queue_passed"], paths["review_csv"],
-                api_key=config.get("api_key"), state_path=paths["qa_state"], **_model_kwarg(config))
+                api_key=config.get("api_key"), state_path=paths["qa_state"],
+                offer_config_path=config.get("offer_config"), **_model_kwarg(config))
 
         elif stage == "send":
             queue = json.loads(Path(paths["queue_passed"]).read_text(encoding="utf-8"))
@@ -273,7 +279,11 @@ def main():
     ap.add_argument("--crawl-dir", default=None, help="override crawl output dir (default: <work-dir>/crawler_output)")
     ap.add_argument("--offer-config", default=None, help="needed for the draft stage")
     ap.add_argument("--sender-db", default=None, help="shared sqlite state DB (default: ../sender/sender_state.db)")
-    ap.add_argument("--api-key", default=None, help="Anthropic API key (default: ANTHROPIC_API_KEY env var)")
+    # real pre-existing gap fixed while touching this line for the Gemini
+    # swap: this flag never actually read an env var before (default=None
+    # always) even though every stage it wraps does -- orchestrator should too
+    ap.add_argument("--api-key", default=os.environ.get("GEMINI_API_KEY"),
+                     help="Gemini API key (default: GEMINI_API_KEY env var)")
     ap.add_argument("--model", default=None, help="override the model for every LLM-calling stage "
                                                     "(default: each stage keeps its own default)")
     ap.add_argument("--workers", type=int, default=None, help="crawler concurrency")

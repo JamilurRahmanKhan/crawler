@@ -443,6 +443,26 @@ def test_run_pipeline_dry_run_scopes_to_send_only_not_analyze_or_draft(tmp_path)
         assert mock_draft.call_args.kwargs.get("dry_run", False) is False
 
 
+def test_run_pipeline_threads_offer_config_into_qa_gate_for_redraft_loop(tmp_path):
+    """qa_gate.py's new judge-feedback redraft loop (real feature, not a
+    hypothetical) is opt-in via offer_config_path -- orchestrator already
+    requires offer_config for draft, so qa_gate should get the same file
+    automatically, not need a second separate config key."""
+    work_dir = tmp_path / "run1"
+    paths = build_work_paths(str(work_dir))
+    input_csv, offer_config = _seed_all_stage_artifacts(tmp_path, paths)
+
+    with patch.object(orchestrator.qa_gate_module, "run_batch") as mock_qa_gate:
+        mock_qa_gate.return_value = {"passed": 0, "redrafted": 0}
+        config = merge_config({
+            "input_csv": input_csv, "offer_config": offer_config, "work_dir": str(work_dir),
+            "api_key": "fake-key",
+        }, {"only": ["qa_gate"]})
+        run_pipeline(config)
+
+        assert mock_qa_gate.call_args.kwargs["offer_config_path"] == offer_config
+
+
 def test_run_pipeline_without_feedback_flag_skips_microstage(tmp_path):
     work_dir = tmp_path / "run1"
     paths = build_work_paths(str(work_dir))

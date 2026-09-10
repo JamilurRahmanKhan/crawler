@@ -2,7 +2,7 @@
 
 Turns crawled page text into structured business data — what a company
 does, their pain points, hiring/tech signals, and concrete hooks worth
-writing a cold email around. One Claude API call per domain, with a
+writing a cold email around. One Gemini API call per domain, with a
 **deterministic hallucination clamp**: every claim in `recent_events`,
 `pains`, and `hooks` must carry a verbatim quote + source URL, and this
 code verifies that quote actually appears in the crawled text before
@@ -16,25 +16,39 @@ different stages.
 ## The one thing this needs that the other 3 stages didn't: an API key
 
 Unlike hygiene/crawler/contacts/sender (all free/local), this stage makes
-a real Claude API call and costs real money per domain. You need your own
-`ANTHROPIC_API_KEY`.
+a real Gemini API call per domain. Uses Google's Gemini API
+(`google-genai` SDK) instead of the original design's Claude, since this
+pipeline runs at $0 budget and Gemini has a genuine free tier. You need
+your own `GEMINI_API_KEY` (aistudio.google.com).
 
-**Honest status on testing:** no API key was available in the session that
-built this, so every function is verified with the real `anthropic` SDK
-mocked at the client boundary — the plumbing (prompt building, the prefill
-JSON technique, error handling, quote verification, file I/O landing in
-the right place) is fully tested and was verified against **real crawled
-data** (basecamp.com, buffer.com, discord.com) end-to-end with a mocked
-response standing in for the actual model call. The live extraction
-*quality* — whether Claude actually pulls good hooks — is not verified
-here. Spot-check the first dozen or so real extractions by hand before
+**Status on testing:** every function is verified with the real
+`google-genai` client mocked at the client boundary — the plumbing (prompt
+building, JSON-mode output, error handling, quote verification, file I/O
+landing in the right place) is fully tested. It was ALSO verified live
+against the real Gemini API with a real free-tier key: a real call
+against basecamp.com's actual crawled text returned a genuine extraction
+(`company_name: "Basecamp"`, real hooks with real quotes and source URLs
+pulled from the actual page). One real bug was caught this way and fixed:
+`gemini-3.6-flash` is a reasoning model that spends part of
+`max_output_tokens` on invisible "thinking" tokens before writing visible
+JSON — the original budget (2048) hit `finish_reason=MAX_TOKENS` and
+silently truncated real output mid-object; raised to 8192. Real extraction
+*quality* across a large, varied batch is still not proven by one smoke
+test — spot-check the first dozen or so real extractions by hand before
 trusting a big batch.
+
+Retries transient `429`/`503` errors (2 retries, 5s backoff) — verified
+against the real exception types `google.genai.errors` actually raises,
+and later confirmed live against a genuine `429 RESOURCE_EXHAUSTED`: the
+free tier caps out at **20 requests per project per day** (not just
+per-minute), a real constraint worth planning batch sizes around — see
+[`orchestrator/README.md`](../orchestrator/README.md) for the full note.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=AQ...
 ```
 
 ## Run
@@ -46,15 +60,15 @@ python analyze.py --crawl-dir ../crawler/output --dry-run
 # real run
 python analyze.py --crawl-dir ../crawler/output
 python analyze.py --crawl-dir ../crawler/output --domain stripe.com
-python analyze.py --crawl-dir ../crawler/output --model claude-haiku-4-5-20251001  # cheaper, at 850-domain scale worth considering
+python analyze.py --crawl-dir ../crawler/output --model gemini-3.6-flash-lite  # cheaper, at 850-domain scale worth considering
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--crawl-dir` | `../crawler/output` | where `crawl_result.json` files live |
 | `--domain` | — | process just this one domain |
-| `--api-key` | `ANTHROPIC_API_KEY` env var | your Claude API key |
-| `--model` | `claude-sonnet-5` | which model to use |
+| `--api-key` | `GEMINI_API_KEY` env var | your Gemini API key |
+| `--model` | `gemini-3.6-flash` | which model to use (Gemini free tier: flash/lite models only -- Pro-tier carries a 0-request free quota, confirmed live) |
 | `--dry-run` | off | show what would be sent (with real char counts from real crawled data), call nothing |
 
 `--dry-run` correctly skips (doesn't preview) any domain whose upstream
@@ -69,7 +83,7 @@ would have correctly skipped. Dry-run now matches reality exactly.
 {
   "domain": "acme.com",
   "analyzed_at": "...",
-  "model_used": "claude-sonnet-5",
+  "model_used": "gemini-3.6-flash",
   "status": "ok",
   "signal_gate": "ok",
   "company_name": "Acme", "what_they_do": "...", "icp_they_serve": "...",
@@ -93,7 +107,7 @@ leads to a shorter, claim-free template downstream (Stage 5) instead of
 forcing a personalized angle that genuinely isn't there — never invent
 specificity that wasn't earned.
 
-`quotes_dropped`: how many claims Claude made that didn't verify against
+`quotes_dropped`: how many claims Gemini made that didn't verify against
 the actual crawled text and got removed. A domain with a high count here
 is worth a manual look — the model may have been reaching for something
 that wasn't in the source.
@@ -116,5 +130,5 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-30 offline tests. Anthropic API calls mocked at the client boundary for
-determinism and because no key was available to test against live.
+33 offline tests. Gemini API calls mocked at the client boundary for
+determinism; also verified live against the real API (see above).

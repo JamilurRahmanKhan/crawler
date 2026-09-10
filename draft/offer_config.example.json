@@ -19,5 +19,13 @@
     }
   ],
 
-  "cta_style": "soft, interest-based question (e.g. 'worth a look?') -- never a hard meeting-time ask in email 1, no calendar link until the recipient shows interest"
+  "cta_style": "soft, interest-based question (e.g. 'worth a look?') -- never a hard meeting-time ask in email 1, no calendar link until the recipient shows interest",
+
+  "_example_emails_comment": "OPTIONAL. Hand-write 1-3 real emails you'd be proud to send, purely as a tone/structure reference for the model -- useful on day one, before Stage 10's feedback loop has any real replies to learn from. The facts inside these are NEVER reused for a real lead, only the style. Delete this whole key if you don't want it.",
+  "example_emails": [
+    {
+      "subject": "quick question",
+      "body": "Saw you just opened a new office in Austin -- always a sign of real momentum. We help companies like yours cut onboarding time in half during exactly this kind of growth phase. Worth a look?"
+    }
+  ]
 }

@@ -23,11 +23,13 @@ same schema this project already writes to -- see db.py's `replies` table,
 added specifically to give this stage something real to learn from) and
 crawler/output/<domain>/analysis.json (Stage 3's real verified facts).
 
-Honest note on testing: same situation as every other Claude-calling stage
-in this project -- no ANTHROPIC_API_KEY was available in the session that
-built this. The sentiment classification call is fully tested with the
-real Anthropic SDK mocked at the client boundary; the actual classification
-*quality* is not verified here.
+Uses Google's Gemini API (google-genai SDK), same as every other
+LLM-calling stage in this project, at $0 budget. The sentiment
+classification call is fully tested with the real google-genai client
+mocked at the client boundary, and was ALSO verified live against the
+real Gemini API with a real free-tier key; the actual classification
+*quality* on a large, varied batch of real replies is still not proven by
+one live smoke test -- spot-check the first classified batch by hand.
 
 Usage:
     python feedback.py --db ../sender/sender_state.db classify
@@ -40,9 +42,17 @@ import logging
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
-import anthropic
+from google import genai
+from google.genai import types
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # optional -- picks up a local .env with GEMINI_API_KEY if python-dotenv is installed
+except ImportError:
+    pass  # fine without it -- just means you set the real env var yourself
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "sender"))
 import db as db_module  # noqa: E402 -- real cross-module reuse, not a stub
@@ -51,7 +61,7 @@ log = logging.getLogger("feedback")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                      handlers=[logging.StreamHandler(sys.stdout)])
 
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "gemini-3.6-flash"
 MIN_SAMPLE_SIZE = 200  # per the original design: don't trust a rate before ~200 sends per arm
 
 DEFAULT_THRESHOLDS = {
@@ -85,32 +95,54 @@ def build_sentiment_prompt(reply_text: str) -> str:
     return SENTIMENT_PROMPT_TEMPLATE.format(reply_text=reply_text)
 
 
-def call_claude_sentiment(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
-    """Never raises. Same prefill-JSON technique as every other Claude call
-    in this project, for the same reliability reason."""
+RETRYABLE_STATUS_CODES = {429, 503}  # rate limit / transient overload, hit
+# live for real during this project (a genuine 503 from Google's side)
+MAX_RETRIES = 2
+RETRY_BACKOFF_SEC = 5
+
+
+def call_gemini_sentiment(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
+    """Never raises. Uses Gemini's native JSON mode, same as every other
+    stage in this project -- no prefill hack needed. max_output_tokens is
+    4096, not the tiny sentiment-response size (3 fields) alone --
+    gemini-3.6-flash is a reasoning model that spends part of this same
+    budget on invisible "thinking" tokens before writing the visible JSON
+    (real bug hit and fixed live in analyze.py first: too small a budget
+    silently truncates the response mid-object). Retries transient
+    429/503 errors with a fixed backoff before giving up."""
     if not api_key:
         return {"_api_error": True, "_error_detail": "no API key provided"}
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=model,
-            max_tokens=256,
-            messages=[
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "{"},
-            ],
-        )
-        raw_text = "{" + response.content[0].text
-        cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text.strip())
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        return json.loads(cleaned)
-    except Exception as e:
-        return {"_api_error": True, "_error_detail": str(e)}
+    last_error = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=4096,
+                ),
+            )
+            cleaned = re.sub(r"^```(?:json)?\s*", "", response.text.strip())
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+            return json.loads(cleaned)
+        except genai.errors.APIError as e:
+            last_error = e
+            if e.code not in RETRYABLE_STATUS_CODES or attempt == MAX_RETRIES:
+                break
+            log.warning(f"Gemini call failed ({e.code} {e.status}), retrying "
+                        f"in {RETRY_BACKOFF_SEC}s (attempt {attempt + 1}/{MAX_RETRIES})")
+            time.sleep(RETRY_BACKOFF_SEC)
+        except Exception as e:
+            last_error = e
+            break
+    return {"_api_error": True, "_error_detail": str(last_error)}
 
 
 def classify_reply_sentiment(reply_text: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
     prompt = build_sentiment_prompt(reply_text)
-    return call_claude_sentiment(prompt, api_key=api_key, model=model)
+    return call_gemini_sentiment(prompt, api_key=api_key, model=model)
 
 
 def run_sentiment_batch(conn, api_key: str, model: str = DEFAULT_MODEL) -> dict:
@@ -299,7 +331,7 @@ def cmd_export_few_shot(args):
 def main():
     ap = argparse.ArgumentParser(description="Stage 10: Feedback loop.")
     ap.add_argument("--db", default="../sender/sender_state.db")
-    ap.add_argument("--api-key", default=os.environ.get("ANTHROPIC_API_KEY"))
+    ap.add_argument("--api-key", default=os.environ.get("GEMINI_API_KEY"))
     ap.add_argument("--model", default=DEFAULT_MODEL)
     sub = ap.add_subparsers(dest="command", required=True)
 
@@ -315,7 +347,7 @@ def main():
 
     if args.command == "classify":
         if not args.api_key:
-            raise SystemExit("No API key. Set ANTHROPIC_API_KEY or pass --api-key.")
+            raise SystemExit("No API key. Set GEMINI_API_KEY or pass --api-key.")
         cmd_classify(args)
     elif args.command == "report":
         cmd_report(args)

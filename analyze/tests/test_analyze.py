@@ -13,7 +13,7 @@ from analyze import (
     verify_quote_in_sources,
     verify_extraction_quotes,
     compute_signal_gate,
-    call_claude_extraction,
+    call_gemini_extraction,
     analyze_domain,
     run_batch,
     EXTRACTION_SCHEMA_KEYS,
@@ -197,45 +197,94 @@ def test_signal_gate_low_signal_when_disqualifier_present():
     assert compute_signal_gate(extraction) == "low_signal"
 
 
-# --- call_claude_extraction (mocked Anthropic client) -----------------------------
+# --- call_gemini_extraction (mocked google.genai client) --------------------------
 
-@patch("analyze.anthropic.Anthropic")
-def test_call_claude_extraction_uses_prefill_and_parses_json(mock_anthropic_cls):
+@patch("analyze.genai.Client")
+def test_call_gemini_extraction_uses_json_mode_and_parses_json(mock_client_cls):
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text='"company_name": "Acme", "what_they_do": "PM software"}')]
-    mock_client.messages.create.return_value = mock_response
-    mock_anthropic_cls.return_value = mock_client
+    mock_response.text = '{"company_name": "Acme", "what_they_do": "PM software"}'
+    mock_client.models.generate_content.return_value = mock_response
+    mock_client_cls.return_value = mock_client
 
-    result = call_claude_extraction("some prompt", api_key="fake-key", model="claude-sonnet-5")
+    result = call_gemini_extraction("some prompt", api_key="fake-key", model="gemini-3.6-flash")
     assert result["company_name"] == "Acme"
 
-    call_kwargs = mock_client.messages.create.call_args.kwargs
-    messages = call_kwargs["messages"]
-    assert messages[-1]["role"] == "assistant"
-    assert messages[-1]["content"] == "{"
+    call_kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert call_kwargs["config"].response_mime_type == "application/json"
 
 
-@patch("analyze.anthropic.Anthropic")
-def test_call_claude_extraction_handles_api_error_gracefully(mock_anthropic_cls):
+@patch("analyze.genai.Client")
+def test_call_gemini_extraction_handles_api_error_gracefully(mock_client_cls):
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = Exception("API error")
-    mock_anthropic_cls.return_value = mock_client
+    mock_client.models.generate_content.side_effect = Exception("API error")
+    mock_client_cls.return_value = mock_client
 
-    result = call_claude_extraction("some prompt", api_key="fake-key", model="claude-sonnet-5")
+    result = call_gemini_extraction("some prompt", api_key="fake-key", model="gemini-3.6-flash")
     assert result["_api_error"] is True
 
 
-def test_call_claude_extraction_no_key_returns_error_without_calling_api():
-    with patch("analyze.anthropic.Anthropic") as mock_anthropic_cls:
-        result = call_claude_extraction("prompt", api_key=None, model="claude-sonnet-5")
+def test_call_gemini_extraction_no_key_returns_error_without_calling_api():
+    with patch("analyze.genai.Client") as mock_client_cls:
+        result = call_gemini_extraction("prompt", api_key=None, model="gemini-3.6-flash")
         assert result["_api_error"] is True
-        mock_anthropic_cls.assert_not_called()
+        mock_client_cls.assert_not_called()
+
+
+# --- call_gemini_extraction retry on transient errors (real bug hit live: a
+# real 503 UNAVAILABLE from Google's side during this project) -----------------
+
+@patch("analyze.time.sleep")
+@patch("analyze.genai.Client")
+def test_call_gemini_extraction_retries_on_503_then_succeeds(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = '{"company_name": "Acme"}'
+    mock_client.models.generate_content.side_effect = [
+        errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}}),
+        mock_response,
+    ]
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_extraction("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["company_name"] == "Acme"
+    assert mock_client.models.generate_content.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+@patch("analyze.time.sleep")
+@patch("analyze.genai.Client")
+def test_call_gemini_extraction_gives_up_after_max_retries(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = errors.ServerError(
+        503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_extraction("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["_api_error"] is True
+    assert mock_client.models.generate_content.call_count == 3  # 1 + 2 retries
+
+
+@patch("analyze.time.sleep")
+@patch("analyze.genai.Client")
+def test_call_gemini_extraction_does_not_retry_non_retryable_error(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = errors.ClientError(
+        400, {"error": {"message": "bad key", "status": "INVALID_ARGUMENT"}})
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_extraction("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["_api_error"] is True
+    assert mock_client.models.generate_content.call_count == 1
+    mock_sleep.assert_not_called()
 
 
 # --- analyze_domain (full orchestration) ------------------------------------------
 
-@patch("analyze.call_claude_extraction")
+@patch("analyze.call_gemini_extraction")
 def test_analyze_domain_full_pipeline(mock_call):
     mock_call.return_value = {
         "company_name": "Acme", "what_they_do": "PM software for construction",
@@ -261,7 +310,7 @@ def test_analyze_domain_skips_non_ok_crawl_status():
     assert result["status"] == "no_crawl_data"
 
 
-@patch("analyze.call_claude_extraction")
+@patch("analyze.call_gemini_extraction")
 def test_analyze_domain_low_signal_when_no_strong_hooks(mock_call):
     mock_call.return_value = {
         "company_name": "Acme", "what_they_do": "", "icp_they_serve": "", "services": [],
@@ -272,7 +321,7 @@ def test_analyze_domain_low_signal_when_no_strong_hooks(mock_call):
     assert result["signal_gate"] == "low_signal"
 
 
-@patch("analyze.call_claude_extraction")
+@patch("analyze.call_gemini_extraction")
 def test_analyze_domain_propagates_api_error(mock_call):
     mock_call.return_value = {"_api_error": True, "_error_detail": "API error"}
     result = analyze_domain(SAMPLE_CRAWL_RESULT, api_key="fake-key", model="claude-sonnet-5")

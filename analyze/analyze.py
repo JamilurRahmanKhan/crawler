@@ -1,7 +1,7 @@
 """
 Stage 3: Analyze -- turns crawled page text into structured business data
 (what they do, pain points, hiring signals, hooks worth writing an email
-around) via a single Claude API call per domain, with a deterministic
+around) via a single Gemini API call per domain, with a deterministic
 hallucination clamp: every claim the model makes in recent_events/pains/
 hooks must carry a verbatim quote + source_url, and this code VERIFIES that
 quote actually appears in the crawled text before trusting it. A claim that
@@ -9,16 +9,20 @@ doesn't verify gets dropped, never passed downstream -- "specific and
 credible" is the entire value of a personalized cold email; a fabricated
 detail is worse than a generic one.
 
-Honest note on testing: this is the first pipeline stage needing a real
-Claude API call, and no ANTHROPIC_API_KEY was available in this session's
-shell to test against (Claude Code doesn't expose its own credentials to
-scripts -- correctly so). Every function here is tested with the real
-Anthropic Python SDK mocked at the client boundary, same pattern as
-OpenCorporates in contacts/ -- the API-call plumbing (prefill technique,
-JSON parsing, error handling) is verified; the actual live extraction
-quality is not, since that requires your own key. Spot-check the first
-dozen or so real extractions by hand before trusting a big batch -- same
-advice the original pipeline design gave for this exact stage.
+Uses Google's Gemini API (google-genai SDK) -- Anthropic's Claude was the
+original design's model, but this pipeline runs at $0 budget and no
+Anthropic key is available; Gemini's free tier is. Unlike Claude's
+prefill-JSON trick (seeding the assistant turn with "{" to force clean
+output), Gemini has native structured JSON output
+(response_mime_type="application/json"), so no prefill hack is needed --
+this is a genuine simplification, not a workaround. Every function here
+is tested with the real google-genai client mocked at the client
+boundary, same pattern used throughout this project. It was ALSO
+verified live against the real Gemini API with a real free-tier key:
+gemini-3.6-flash returns clean, valid JSON for real prompts. Spot-check
+the first dozen or so real extractions by hand before trusting a big
+batch regardless -- model output quality is never fully proven by a
+handful of smoke tests.
 
 Output schema (per domain):
     {
@@ -52,13 +56,26 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import anthropic
+from google import genai
+from google.genai import types
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # optional -- picks up a local .env with GEMINI_API_KEY if python-dotenv is installed
+except ImportError:
+    pass  # fine without it -- just means you set the real env var yourself
 
 log = logging.getLogger("analyze")
 
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "gemini-3.6-flash"
 MAX_PROMPT_CHARS = 60_000
-MAX_OUTPUT_TOKENS = 2048
+# gemini-3.6-flash is a reasoning model -- it spends part of this budget on
+# invisible "thinking" tokens (~1800 seen live, real content extraction)
+# BEFORE writing any visible JSON. A real live call with the previous
+# value (2048) hit finish_reason=MAX_TOKENS and silently truncated the
+# JSON mid-object -- caught by actually running this against real crawled
+# data, not just mocked tests. 8192 leaves real headroom for both.
+MAX_OUTPUT_TOKENS = 8192
 MIN_HOOK_SPECIFICITY_FOR_OK = 7
 
 EXTRACTION_SCHEMA_KEYS = [
@@ -147,9 +164,8 @@ def parse_extraction_response(raw_text: str) -> dict:
     cleaned = raw_text.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
     cleaned = re.sub(r"\s*```$", "", cleaned)
-    # tolerate a dangling opening brace from the prefill technique not
-    # being included in the raw text passed in (call_claude_extraction
-    # re-adds it before calling this, but this function stays robust either way)
+    # defensive: Gemini's JSON mode returns a clean object directly, but
+    # stay robust if a caller ever passes a body missing its leading brace
     if not cleaned.startswith("{"):
         cleaned = "{" + cleaned
 
@@ -221,28 +237,46 @@ def compute_signal_gate(extraction: dict) -> str:
 # Claude API call
 # ---------------------------------------------------------------------------
 
-def call_claude_extraction(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
+RETRYABLE_STATUS_CODES = {429, 503}  # rate limit / transient overload -- hit
+# live for real during this project (a genuine 503 UNAVAILABLE from
+# Google's side on the free tier); 400/401/404 etc are never retried,
+# retrying a bad key or a malformed request forever gains nothing.
+MAX_RETRIES = 2
+RETRY_BACKOFF_SEC = 5
+
+
+def call_gemini_extraction(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
     """Never raises -- returns {"_api_error": True, "_error_detail": ...}
     on any failure so a batch run can log-and-continue past one bad call.
-    Uses the prefill technique (assistant turn starting with "{") to force
-    JSON-only output without relying on the model to avoid markdown fences
-    on its own -- more reliable than asking nicely in the prompt alone."""
+    Uses Gemini's native JSON mode (response_mime_type) to force
+    JSON-only output -- no prefill hack needed, unlike Claude. Retries
+    transient 429/503 errors with a fixed backoff before giving up."""
     if not api_key:
         return {"_api_error": True, "_error_detail": "no API key provided"}
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=model,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            messages=[
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "{"},
-            ],
-        )
-        raw_text = "{" + response.content[0].text
-        return parse_extraction_response(raw_text)
-    except Exception as e:
-        return {"_api_error": True, "_error_detail": str(e)}
+    last_error = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                ),
+            )
+            return parse_extraction_response(response.text)
+        except genai.errors.APIError as e:
+            last_error = e
+            if e.code not in RETRYABLE_STATUS_CODES or attempt == MAX_RETRIES:
+                break
+            log.warning(f"Gemini call failed ({e.code} {e.status}), retrying "
+                        f"in {RETRY_BACKOFF_SEC}s (attempt {attempt + 1}/{MAX_RETRIES})")
+            time.sleep(RETRY_BACKOFF_SEC)
+        except Exception as e:
+            last_error = e
+            break
+    return {"_api_error": True, "_error_detail": str(last_error)}
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +296,7 @@ def analyze_domain(crawl_result: dict, api_key: str, model: str = DEFAULT_MODEL)
                 "error": f"upstream crawl status was '{crawl_result.get('status')}', not 'ok'"}
 
     prompt = build_extraction_prompt(crawl_result)
-    extraction = call_claude_extraction(prompt, api_key=api_key, model=model)
+    extraction = call_gemini_extraction(prompt, api_key=api_key, model=model)
 
     if extraction.get("_api_error"):
         return {**base, "status": "api_error", "error": extraction.get("_error_detail", "unknown API error")}
@@ -346,8 +380,8 @@ def main():
     ap.add_argument("--crawl-dir", default="../crawler/output",
                      help="output dir from crawl.py (default: ../crawler/output)")
     ap.add_argument("--domain", help="process a single domain only")
-    ap.add_argument("--api-key", default=os.environ.get("ANTHROPIC_API_KEY"),
-                     help="Anthropic API key (default: ANTHROPIC_API_KEY env var)")
+    ap.add_argument("--api-key", default=os.environ.get("GEMINI_API_KEY"),
+                     help="Gemini API key (default: GEMINI_API_KEY env var)")
     ap.add_argument("--model", default=DEFAULT_MODEL, help=f"model to use (default: {DEFAULT_MODEL})")
     ap.add_argument("--dry-run", action="store_true", help="show what would be sent, call nothing")
     args = ap.parse_args()
@@ -359,7 +393,7 @@ def main():
     setup_logging(crawl_dir)
 
     if not args.dry_run and not args.api_key:
-        raise SystemExit("No API key. Set ANTHROPIC_API_KEY or pass --api-key (or use --dry-run).")
+        raise SystemExit("No API key. Set GEMINI_API_KEY or pass --api-key (or use --dry-run).")
 
     domain_filter = {args.domain} if args.domain else None
     run_batch(crawl_dir, api_key=args.api_key, model=args.model,

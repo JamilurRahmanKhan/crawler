@@ -2,7 +2,7 @@
 Stage 5: Draft -- writes the actual personalized cold email sequence (4
 steps: intro, nudge, proof, breakup) grounded ONLY in Stage 3's
 analysis.json verified facts, using YOUR real offer (config file, not
-hardcoded). One Claude call generates all 4 steps together so the sequence
+hardcoded). One Gemini call generates all 4 steps together so the sequence
 reads as one coherent escalating conversation, not four disconnected blasts.
 
 Real integration, not a stub: reuses qa_gate.py's ACTUAL check functions
@@ -24,11 +24,13 @@ Output: queue.json, flattened across all leads x 4 steps, in the EXACT
 shape qa_gate.py --queue (and sender.py --queue) already expect. Zero
 reformatting needed at the hand-off.
 
-Honest note on testing: same situation as analyze.py and qa_gate.py -- no
-ANTHROPIC_API_KEY was available in the session that built this. Every
-function is tested with the real Anthropic SDK mocked at the client
-boundary; the actual drafted email *quality* is not verified here (and
-structurally can't be, without your real offer_config filled in).
+Uses Google's Gemini API (google-genai SDK), same as analyze.py and
+qa_gate.py, at $0 budget. Every function is tested with the real
+google-genai client mocked at the client boundary, and was ALSO verified
+live against the real Gemini API with a real free-tier key. The actual
+drafted email *quality* still can't be fully judged from a smoke test
+(and structurally can't be, without your real offer_config filled in) --
+spot-check the first batch by hand.
 
 Usage:
     cp offer_config.example.json offer_config.json   # then fill in your real business
@@ -44,7 +46,14 @@ import sys
 import time
 from pathlib import Path
 
-import anthropic
+from google import genai
+from google.genai import types
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # optional -- picks up a local .env with GEMINI_API_KEY if python-dotenv is installed
+except ImportError:
+    pass  # fine without it -- just means you set the real env var yourself
 
 # real cross-module reuse -- not reimplemented, not a stub
 sys.path.insert(0, str(Path(__file__).parent.parent / "qa_gate"))
@@ -58,9 +67,32 @@ log = logging.getLogger("draft")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                      handlers=[logging.StreamHandler(sys.stdout)])
 
-DEFAULT_MODEL = "claude-opus-5"  # matches the original pipeline design's model split -- best writer for the actual copy
+# the original design used a stronger "writer" model here (claude-opus-5)
+# vs. sonnet for analyze/qa_gate/feedback -- on Gemini's actual free tier,
+# Pro-tier models carry a hard 0-request free quota (confirmed live: a
+# real call to gemini-3.1-pro returned RESOURCE_EXHAUSTED, limit 0), so
+# there is no free "better writer" option; every stage shares one
+# flash-tier model. A genuine free-tier ceiling, not a design regression.
+DEFAULT_MODEL = "gemini-3.6-flash"
 SEQUENCE_LENGTH = 4
-MAX_OUTPUT_TOKENS = 2048
+# gemini-3.6-flash is a reasoning model -- see analyze.py's MAX_OUTPUT_TOKENS
+# comment for the real live bug (MAX_TOKENS truncation) this budget avoids
+MAX_OUTPUT_TOKENS = 8192
+
+# contacts.json's own list order is scrape PRIORITY (real page vs. guessed),
+# assigned before contacts.py computes each contact's final "confidence"
+# (which also factors in SMTP verification) -- so contacts[0] is not
+# necessarily the best-confidence contact. Real gap: an unverified/guessed
+# contact could sit ahead of one that verified successfully.
+CONFIDENCE_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def pick_best_contact(contacts: list) -> dict:
+    """min() is stable -- among equal confidence, the first in
+    contacts.json's own (priority-based) order still wins, unchanged from
+    before this existed."""
+    return min(contacts, key=lambda c: CONFIDENCE_RANK.get(c.get("confidence"), 99))
+
 
 REQUIRED_OFFER_KEYS = [
     "your_company_name", "sender_name", "what_you_sell",
@@ -87,7 +119,7 @@ WHO YOU'RE WRITING TO: {contact_name} ({contact_title}) at {company_name}.
 
 VERIFIED FACTS ABOUT THIS COMPANY -- reference ONLY these, do not invent or assume anything else about them:
 {grounding_text}
-
+{previous_feedback_section}
 Write exactly {sequence_length} emails as a JSON array, one object per step:
 [{{"step": 1, "subject": "", "body": ""}}, ...]
 
@@ -99,7 +131,7 @@ Rules, all mandatory:
 - Subject lines: 3-6 words, lowercase, no clickbait, consistent across all 4 (they thread as one conversation).
 - Never use: "hope this email finds you well", "just following up", "revolutionary", "game-changing", "synergy", "circling back", "touch base", "per my last email".
 - Never invent a fact, statistic, or quote that isn't in the verified facts or proof points above.
-{few_shot_section}
+{example_emails_section}{few_shot_section}
 Return ONLY the JSON array, no markdown, no commentary.
 """
 
@@ -152,7 +184,21 @@ def _grounding_text(analysis: dict) -> str:
     return "\n".join(lines) if lines else "(no strong verified hooks found -- keep this generic and short)"
 
 
-def build_draft_prompt(analysis: dict, contact: dict, offer_config: dict, few_shot_examples: list = None) -> str:
+def format_example_emails_block(examples: list) -> str:
+    """Static style-reference examples, hand-written into offer_config.json
+    -- unlike Stage 10's few-shot loop (real positive replies, proof it
+    worked), these carry no such proof; they exist purely so Draft has a
+    tone/structure reference on day one, before any real replies exist."""
+    lines = ["STYLE REFERENCE (your own hand-picked examples -- match the "
+             "tone and structure, but do NOT reuse any facts from them, "
+             "they are not real data about this lead):"]
+    for ex in examples:
+        lines.append(f"- Subject: \"{ex.get('subject', '')}\"\n  Body: {ex.get('body', '')}")
+    return "\n".join(lines)
+
+
+def build_draft_prompt(analysis: dict, contact: dict, offer_config: dict, few_shot_examples: list = None,
+                        previous_feedback: str = None) -> str:
     proof_points = offer_config.get("proof_points", []) or []
     proof_points_text = "\n".join(f"- {p.get('claim', '')} ({p.get('detail', '')})" for p in proof_points) or "(none provided)"
 
@@ -166,6 +212,25 @@ def build_draft_prompt(analysis: dict, contact: dict, offer_config: dict, few_sh
     if few_shot_examples:
         few_shot_section = "\n" + format_few_shot_block(few_shot_examples) + "\n"
 
+    # bootstrap style reference: your own hand-picked examples, independent
+    # of real replies -- useful before Stage 10 has anything to teach from
+    example_emails = offer_config.get("example_emails") or []
+    example_emails_section = ""
+    if example_emails:
+        example_emails_section = "\n" + format_example_emails_block(example_emails) + "\n"
+
+    # qa_gate.py's judge-feedback redraft loop: a specific rejection reason
+    # from a previous attempt, fed back for one automatic retry before an
+    # item ever reaches manual review -- distinct from self_check_draft's
+    # own rule-based retry (links/banned phrases), this is LLM judgment.
+    previous_feedback_section = ""
+    if previous_feedback:
+        previous_feedback_section = (
+            f"\nA PREVIOUS ATTEMPT AT THIS EMAIL WAS REVIEWED AND REJECTED for this "
+            f"reason: \"{previous_feedback}\". Fix this specific issue in your rewrite; "
+            f"everything else about the brief above still applies.\n"
+        )
+
     return DRAFT_PROMPT_TEMPLATE.format(
         your_company_name=offer_config.get("your_company_name", ""),
         sender_name=offer_config.get("sender_name", ""),
@@ -173,7 +238,9 @@ def build_draft_prompt(analysis: dict, contact: dict, offer_config: dict, few_sh
         icp_description=offer_config.get("icp_description", ""),
         proof_points_text=proof_points_text,
         cta_style=offer_config.get("cta_style", ""),
+        example_emails_section=example_emails_section,
         few_shot_section=few_shot_section,
+        previous_feedback_section=previous_feedback_section,
         contact_name=contact_name,
         contact_title=contact_title,
         company_name=company_name,
@@ -222,32 +289,53 @@ def self_check_draft(email: dict) -> dict:
     return {"passed": len(violations) == 0, "violations": violations}
 
 
-def call_claude_draft(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> list:
+RETRYABLE_STATUS_CODES = {429, 503}  # rate limit / transient overload, hit
+# live for real during this project (a genuine 503 from Google's side)
+MAX_RETRIES = 2
+RETRY_BACKOFF_SEC = 5
+
+
+def call_gemini_draft(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> list:
     """Never raises -- returns [] on any failure (no key, API error, bad
-    JSON) so a batch run logs and continues past one bad lead."""
+    JSON) so a batch run logs and continues past one bad lead. Uses
+    Gemini's native JSON mode -- no prefill hack needed, works for a JSON
+    array response the same way it does for an object. Retries transient
+    429/503 errors with a fixed backoff before giving up."""
     if not api_key:
         return []
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=model,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            messages=[
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "["},
-            ],
-        )
-        raw_text = "[" + response.content[0].text
-        return parse_draft_response(raw_text)
-    except Exception as e:
-        log.warning(f"Claude draft call failed: {e}")
-        return []
+    last_error = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                ),
+            )
+            return parse_draft_response(response.text)
+        except genai.errors.APIError as e:
+            last_error = e
+            if e.code not in RETRYABLE_STATUS_CODES or attempt == MAX_RETRIES:
+                break
+            log.warning(f"Gemini call failed ({e.code} {e.status}), retrying "
+                        f"in {RETRY_BACKOFF_SEC}s (attempt {attempt + 1}/{MAX_RETRIES})")
+            time.sleep(RETRY_BACKOFF_SEC)
+        except Exception as e:
+            last_error = e
+            break
+    log.warning(f"Gemini draft call failed: {last_error}")
+    return []
 
 
 def draft_lead(contact: dict, analysis: dict, offer_config: dict, api_key: str,
-               model: str = DEFAULT_MODEL, max_retries: int = 1, few_shot_examples: list = None) -> list:
-    prompt = build_draft_prompt(analysis, contact, offer_config, few_shot_examples=few_shot_examples)
-    sequence = call_claude_draft(prompt, api_key=api_key, model=model)
+               model: str = DEFAULT_MODEL, max_retries: int = 1, few_shot_examples: list = None,
+               previous_feedback: str = None) -> list:
+    prompt = build_draft_prompt(analysis, contact, offer_config, few_shot_examples=few_shot_examples,
+                                 previous_feedback=previous_feedback)
+    sequence = call_gemini_draft(prompt, api_key=api_key, model=model)
     if not sequence:
         return []
 
@@ -259,7 +347,7 @@ def draft_lead(contact: dict, analysis: dict, offer_config: dict, api_key: str,
         if attempt < max_retries:
             log.warning(f"self-check failed ({check['violations']}), retrying once")
             retry_prompt = prompt + f"\n\nYour previous attempt violated these rules: {check['violations']}. Fix them."
-            retried = call_claude_draft(retry_prompt, api_key=api_key, model=model)
+            retried = call_gemini_draft(retry_prompt, api_key=api_key, model=model)
             if retried:
                 sequence = retried
 
@@ -322,7 +410,7 @@ def run_batch(crawl_dir: str, offer_config_path: str, queue_out: str,
             summary["skipped_no_analysis"] += 1
             continue
 
-        best_contact = contacts[0]
+        best_contact = pick_best_contact(contacts)
 
         if dry_run:
             prompt = build_draft_prompt(analysis, best_contact, offer_config)
@@ -352,7 +440,7 @@ def main():
     ap.add_argument("--crawl-dir", default="../crawler/output")
     ap.add_argument("--offer-config", default="offer_config.json")
     ap.add_argument("--queue-out", default="queue.json", help="ready for qa_gate.py --queue")
-    ap.add_argument("--api-key", default=os.environ.get("ANTHROPIC_API_KEY"))
+    ap.add_argument("--api-key", default=os.environ.get("GEMINI_API_KEY"))
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--domain", help="draft for a single domain only")
     ap.add_argument("--dry-run", action="store_true", help="show what would be drafted, call nothing")
@@ -360,7 +448,7 @@ def main():
     args = ap.parse_args()
 
     if not args.dry_run and not args.api_key:
-        raise SystemExit("No API key. Set ANTHROPIC_API_KEY or pass --api-key (or use --dry-run).")
+        raise SystemExit("No API key. Set GEMINI_API_KEY or pass --api-key (or use --dry-run).")
 
     domain_filter = {args.domain} if args.domain else None
     summary = run_batch(args.crawl_dir, args.offer_config, args.queue_out,

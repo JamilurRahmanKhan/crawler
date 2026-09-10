@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "draft"))
 
 import pytest
 from qa_gate import (
@@ -18,7 +19,7 @@ from qa_gate import (
     check_grounding_keywords,
     run_automated_checks,
     build_judge_prompt,
-    call_claude_judge,
+    call_gemini_judge,
     judge_email,
     should_pass,
     should_sample_for_human_review,
@@ -26,6 +27,8 @@ from qa_gate import (
     save_review_state,
     qa_check_item,
     run_batch,
+    find_contact,
+    redraft_sequence_with_feedback,
     DEFAULT_BANNED_PHRASES,
 )
 
@@ -248,36 +251,89 @@ def test_build_judge_prompt_includes_email_and_grounding_source():
     assert "hiring a Head of Sales" in prompt
 
 
-@patch("qa_gate.anthropic.Anthropic")
-def test_call_claude_judge_uses_prefill_and_parses_json(mock_anthropic_cls):
+@patch("qa_gate.genai.Client")
+def test_call_gemini_judge_uses_json_mode_and_parses_json(mock_client_cls):
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(
-        text='"grounding": 9, "specificity": 8, "peer_tone": 7, "would_reply": 7, '
-             '"overall": 8, "feedback": "solid"}'
-    )]
-    mock_client.messages.create.return_value = mock_response
-    mock_anthropic_cls.return_value = mock_client
+    mock_response.text = json.dumps({
+        "grounding": 9, "specificity": 8, "peer_tone": 7, "would_reply": 7,
+        "overall": 8, "feedback": "solid",
+    })
+    mock_client.models.generate_content.return_value = mock_response
+    mock_client_cls.return_value = mock_client
 
-    result = call_claude_judge("some prompt", api_key="fake-key", model="claude-sonnet-5")
+    result = call_gemini_judge("some prompt", api_key="fake-key", model="gemini-3.6-flash")
     assert result["grounding"] == 9
     assert result["overall"] == 8
 
+    call_kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert call_kwargs["config"].response_mime_type == "application/json"
 
-@patch("qa_gate.anthropic.Anthropic")
-def test_call_claude_judge_handles_api_error(mock_anthropic_cls):
+
+@patch("qa_gate.genai.Client")
+def test_call_gemini_judge_handles_api_error(mock_client_cls):
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = Exception("API down")
-    mock_anthropic_cls.return_value = mock_client
-    result = call_claude_judge("prompt", api_key="fake-key", model="claude-sonnet-5")
+    mock_client.models.generate_content.side_effect = Exception("API down")
+    mock_client_cls.return_value = mock_client
+    result = call_gemini_judge("prompt", api_key="fake-key", model="gemini-3.6-flash")
     assert result["_api_error"] is True
 
 
-def test_call_claude_judge_no_key_skips_api_call():
-    with patch("qa_gate.anthropic.Anthropic") as mock_cls:
-        result = call_claude_judge("prompt", api_key=None, model="claude-sonnet-5")
+def test_call_gemini_judge_no_key_skips_api_call():
+    with patch("qa_gate.genai.Client") as mock_cls:
+        result = call_gemini_judge("prompt", api_key=None, model="gemini-3.6-flash")
         assert result["_api_error"] is True
         mock_cls.assert_not_called()
+
+
+# --- call_gemini_judge retry on transient errors ----------------------------------
+
+@patch("qa_gate.time.sleep")
+@patch("qa_gate.genai.Client")
+def test_call_gemini_judge_retries_on_503_then_succeeds(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = json.dumps({"grounding": 9, "overall": 8})
+    mock_client.models.generate_content.side_effect = [
+        errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}}),
+        mock_response,
+    ]
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_judge("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["overall"] == 8
+    assert mock_client.models.generate_content.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+@patch("qa_gate.time.sleep")
+@patch("qa_gate.genai.Client")
+def test_call_gemini_judge_gives_up_after_max_retries(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = errors.ServerError(
+        503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_judge("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["_api_error"] is True
+    assert mock_client.models.generate_content.call_count == 3
+
+
+@patch("qa_gate.time.sleep")
+@patch("qa_gate.genai.Client")
+def test_call_gemini_judge_does_not_retry_non_retryable_error(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = errors.ClientError(
+        400, {"error": {"message": "bad key", "status": "INVALID_ARGUMENT"}})
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_judge("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["_api_error"] is True
+    assert mock_client.models.generate_content.call_count == 1
+    mock_sleep.assert_not_called()
 
 
 # --- should_pass ---------------------------------------------------------------------
@@ -331,7 +387,7 @@ def test_save_and_load_review_state_roundtrip(tmp_path):
 
 # --- qa_check_item (full per-item orchestration) ----------------------------------
 
-@patch("qa_gate.call_claude_judge")
+@patch("qa_gate.call_gemini_judge")
 def test_qa_check_item_passes_good_email(mock_judge):
     mock_judge.return_value = {"grounding": 9, "specificity": 8, "peer_tone": 8,
                                 "would_reply": 8, "overall": 8, "feedback": "good"}
@@ -343,14 +399,14 @@ def test_qa_check_item_passes_good_email(mock_judge):
 
 def test_qa_check_item_fails_fast_on_automated_violation_no_api_call():
     item = {"to_email": "lead@acme.com", "subject": "hi {{name}}", "body": "bad", "step": 1}
-    with patch("qa_gate.call_claude_judge") as mock_judge:
+    with patch("qa_gate.call_gemini_judge") as mock_judge:
         result = qa_check_item(item, SAMPLE_ANALYSIS, api_key="fake-key", model="claude-sonnet-5",
                                 reviewed_so_far=100)
         assert result["verdict"] == "fail_automated"
         mock_judge.assert_not_called()  # don't waste an API call on an obviously broken email
 
 
-@patch("qa_gate.call_claude_judge")
+@patch("qa_gate.call_gemini_judge")
 def test_qa_check_item_needs_review_within_first_50(mock_judge):
     mock_judge.return_value = {"grounding": 9, "overall": 9}
     item = {"to_email": "lead@acme.com", "subject": "hi", "body": GOOD_EMAIL_BODY, "step": 1}
@@ -365,7 +421,7 @@ def _write_json(path, data):
     Path(path).write_text(json.dumps(data), encoding="utf-8")
 
 
-@patch("qa_gate.call_claude_judge")
+@patch("qa_gate.call_gemini_judge")
 def test_run_batch_end_to_end_writes_passed_and_review_files(mock_judge, tmp_path):
     mock_judge.return_value = {"grounding": 9, "specificity": 8, "peer_tone": 8,
                                 "would_reply": 8, "overall": 9, "feedback": "great"}
@@ -396,7 +452,7 @@ def test_run_batch_end_to_end_writes_passed_and_review_files(mock_judge, tmp_pat
     assert set(["to_email", "subject", "body", "step"]).issubset(passed_items[0].keys())
 
 
-@patch("qa_gate.call_claude_judge")
+@patch("qa_gate.call_gemini_judge")
 def test_run_batch_routes_failures_to_review_csv(mock_judge, tmp_path):
     queue_path = tmp_path / "queue.json"
     _write_json(queue_path, [
@@ -413,3 +469,174 @@ def test_run_batch_routes_failures_to_review_csv(mock_judge, tmp_path):
     assert summary["failed_automated"] == 1
     assert review_out.exists()
     mock_judge.assert_not_called()
+
+
+# --- find_contact -------------------------------------------------------------------
+
+def test_find_contact_returns_matching_contact_by_email(tmp_path):
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "contacts.json", {
+        "domain": "acme.com", "status": "ok",
+        "contacts": [{"email": "jane@acme.com", "matched_name": "Jane Diaz", "matched_title": "Founder"}],
+    })
+    contact = find_contact(crawl_dir, "acme.com", "JANE@acme.com")  # case-insensitive
+    assert contact["matched_name"] == "Jane Diaz"
+
+
+def test_find_contact_falls_back_to_minimal_dict_when_not_found(tmp_path):
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "contacts.json", {
+        "domain": "acme.com", "status": "ok",
+        "contacts": [{"email": "someone-else@acme.com", "matched_name": "Someone Else"}],
+    })
+    contact = find_contact(crawl_dir, "acme.com", "jane@acme.com")
+    assert contact["email"] == "jane@acme.com"
+    assert contact["matched_name"] is None
+
+
+def test_find_contact_falls_back_when_contacts_file_missing(tmp_path):
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    contact = find_contact(crawl_dir, "acme.com", "jane@acme.com")
+    assert contact == {"email": "jane@acme.com", "matched_name": None, "matched_title": None}
+
+
+# --- redraft_sequence_with_feedback (real cross-module reuse of draft.py) ---------
+
+SAMPLE_OFFER_CONFIG = {
+    "your_company_name": "Acme Consulting", "sender_name": "Jane Doe",
+    "what_you_sell": "onboarding software", "icp_description": "B2B SaaS",
+    "proof_points": [{"claim": "cut onboarding time in half", "detail": "for a real client"}],
+    "cta_style": "soft question",
+}
+
+
+@patch("draft.draft_lead")
+def test_redraft_sequence_with_feedback_calls_draft_lead_with_feedback(mock_draft_lead, tmp_path):
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "contacts.json", {
+        "domain": "acme.com", "status": "ok",
+        "contacts": [{"email": "jane@acme.com", "matched_name": "Jane Diaz", "matched_title": "Founder"}],
+    })
+    mock_draft_lead.return_value = [{"to_email": "jane@acme.com", "subject": "redrafted",
+                                       "body": "new body", "step": 1, "domain": "acme.com"}]
+
+    result = redraft_sequence_with_feedback(
+        "acme.com", "jane@acme.com", SAMPLE_ANALYSIS, SAMPLE_OFFER_CONFIG,
+        "too generic, cite the real hook", api_key="fake-key", model="gemini-3.6-flash",
+        crawl_dir=crawl_dir)
+
+    assert result[0]["subject"] == "redrafted"
+    call_kwargs = mock_draft_lead.call_args.kwargs
+    assert call_kwargs["previous_feedback"] == "too generic, cite the real hook"
+    contact_arg = mock_draft_lead.call_args.args[0]
+    assert contact_arg["matched_name"] == "Jane Diaz"
+
+
+# --- run_batch: judge-feedback redraft loop (opt-in via offer_config_path) --------
+
+def test_run_batch_redrafts_step1_judge_failure_when_offer_config_given(tmp_path):
+    queue_path = tmp_path / "queue.json"
+    _write_json(queue_path, [
+        {"to_email": "jane@acme.com", "subject": "original subject",
+         "body": GOOD_EMAIL_BODY, "step": 1, "domain": "acme.com"},
+    ])
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "analysis.json", SAMPLE_ANALYSIS)
+    _write_json(crawl_dir / "acme.com" / "contacts.json", {
+        "domain": "acme.com", "status": "ok",
+        "contacts": [{"email": "jane@acme.com", "matched_name": "Jane Diaz", "matched_title": "Founder"}],
+    })
+    offer_config_path = tmp_path / "offer.json"
+    _write_json(offer_config_path, SAMPLE_OFFER_CONFIG)
+
+    redrafted_items = [{"to_email": "jane@acme.com", "subject": "redrafted subject",
+                          "body": GOOD_EMAIL_BODY, "step": 1, "domain": "acme.com"}]
+
+    def judge_side_effect(item, analysis, api_key, model):
+        if item["subject"] == "original subject":
+            return {"grounding": 3, "overall": 4, "feedback": "too generic"}
+        return {"grounding": 9, "overall": 9, "feedback": "great"}
+
+    with patch("qa_gate.judge_email", side_effect=judge_side_effect), \
+         patch("qa_gate.redraft_sequence_with_feedback", return_value=redrafted_items) as mock_redraft:
+
+        summary = run_batch(str(queue_path), str(crawl_dir), str(tmp_path / "queue_passed.json"),
+                             str(tmp_path / "manual_review.csv"), api_key="fake-key",
+                             state_path=str(tmp_path / "state.json"), offer_config_path=str(offer_config_path))
+
+    mock_redraft.assert_called_once()
+    assert mock_redraft.call_args.kwargs["feedback"] == "too generic"
+    assert summary["redrafted"] == 1
+    assert summary["passed"] == 1
+    passed = json.loads((tmp_path / "queue_passed.json").read_text(encoding="utf-8"))
+    assert passed[0]["subject"] == "redrafted subject"
+
+
+def test_run_batch_does_not_redraft_when_offer_config_not_given(tmp_path):
+    queue_path = tmp_path / "queue.json"
+    _write_json(queue_path, [
+        {"to_email": "jane@acme.com", "subject": "s", "body": GOOD_EMAIL_BODY, "step": 1, "domain": "acme.com"},
+    ])
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "analysis.json", SAMPLE_ANALYSIS)
+
+    with patch("qa_gate.judge_email", return_value={"grounding": 2, "overall": 2, "feedback": "bad"}), \
+         patch("qa_gate.redraft_sequence_with_feedback") as mock_redraft:
+        summary = run_batch(str(queue_path), str(crawl_dir), str(tmp_path / "queue_passed.json"),
+                             str(tmp_path / "manual_review.csv"), api_key="fake-key",
+                             state_path=str(tmp_path / "state.json"))
+
+    mock_redraft.assert_not_called()
+    assert summary.get("redrafted", 0) == 0
+    assert summary["failed_judge"] == 1
+
+
+def test_run_batch_does_not_redraft_on_automated_failure(tmp_path):
+    queue_path = tmp_path / "queue.json"
+    _write_json(queue_path, [
+        {"to_email": "jane@acme.com", "subject": "hi {{name}}", "body": "broken",
+         "step": 1, "domain": "acme.com"},
+    ])
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "analysis.json", SAMPLE_ANALYSIS)
+    offer_config_path = tmp_path / "offer.json"
+    _write_json(offer_config_path, SAMPLE_OFFER_CONFIG)
+
+    with patch("qa_gate.redraft_sequence_with_feedback") as mock_redraft:
+        summary = run_batch(str(queue_path), str(crawl_dir), str(tmp_path / "queue_passed.json"),
+                             str(tmp_path / "manual_review.csv"), api_key="fake-key",
+                             state_path=str(tmp_path / "state.json"), offer_config_path=str(offer_config_path))
+
+    mock_redraft.assert_not_called()
+    assert summary["failed_automated"] == 1
+
+
+def test_run_batch_keeps_original_when_redraft_returns_nothing(tmp_path):
+    queue_path = tmp_path / "queue.json"
+    _write_json(queue_path, [
+        {"to_email": "jane@acme.com", "subject": "original subject",
+         "body": GOOD_EMAIL_BODY, "step": 1, "domain": "acme.com"},
+    ])
+    crawl_dir = tmp_path / "crawler_output"
+    (crawl_dir / "acme.com").mkdir(parents=True)
+    _write_json(crawl_dir / "acme.com" / "analysis.json", SAMPLE_ANALYSIS)
+    offer_config_path = tmp_path / "offer.json"
+    _write_json(offer_config_path, SAMPLE_OFFER_CONFIG)
+
+    with patch("qa_gate.judge_email", return_value={"grounding": 2, "overall": 2, "feedback": "too generic"}), \
+         patch("qa_gate.redraft_sequence_with_feedback", return_value=[]) as mock_redraft:
+        summary = run_batch(str(queue_path), str(crawl_dir), str(tmp_path / "queue_passed.json"),
+                             str(tmp_path / "manual_review.csv"), api_key="fake-key",
+                             state_path=str(tmp_path / "state.json"), offer_config_path=str(offer_config_path))
+
+    mock_redraft.assert_called_once()
+    assert summary["failed_judge"] == 1
+    passed = json.loads((tmp_path / "queue_passed.json").read_text(encoding="utf-8"))
+    assert passed == []

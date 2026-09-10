@@ -16,7 +16,7 @@ python feedback.py --db ../sender/sender_state.db export-few-shot --crawl-dir ..
 ```
 
 1. **`classify`** — every reply saved by `reply_watcher.py` but not yet
-   scored gets sent to Claude for sentiment (`positive`/`neutral`/
+   scored gets sent to Gemini for sentiment (`positive`/`neutral`/
    `negative`, 1-10 confidence, one-line reasoning). Already-classified
    replies are skipped, so it's safe to run repeatedly (e.g. from cron).
 2. **`report`** — groups sends by subject-line variant (the `Re:`
@@ -55,7 +55,7 @@ meeting after the fact.
 ## Verified live, not just mocked
 
 - Full chain proven against real function calls, real SQLite, real files
-  (only the Claude sentiment call itself mocked — no key available):
+  (only the Gemini sentiment call itself mocked in the unit-test suite):
   `db.mark_sent` → `db.save_reply` → `db.mark_replied` →
   `db.update_reply_sentiment` → `feedback.build_few_shot_examples` (real
   join across `leads`/`replies`/`send_log` + a real `analysis.json` on
@@ -63,24 +63,35 @@ meeting after the fact.
   loading that file and injecting the block into a real prompt string.
   Verified the exported company name and grounded quote both land
   correctly in the final draft prompt.
-- The Claude sentiment call was tested against the **real Anthropic API
-  endpoint** with a deliberately invalid key: got back a clean `401
-  Unauthorized`, confirming the request format is genuinely correct.
+- The Gemini sentiment call was ALSO verified live against the real API
+  with a real free-tier key (`google-genai` SDK, native JSON-mode output
+  -- no prefill hack needed, unlike the original Claude-based design).
+  Same reasoning-model token-budget bug hit and fixed here as in every
+  other stage: `gemini-3.6-flash` spends part of `max_output_tokens` on
+  invisible "thinking" tokens before writing visible JSON; raised from
+  256 (sized for Claude's tiny sentiment response) to 4096.
 - A real bug caught before shipping: `save_reply` was storing a trailing
   newline from MIME body encoding, which would have silently broken
   exact-text matching downstream. Fixed by stripping at the storage
   boundary (`db.py`), not at every caller.
+- Retries transient `429`/`503` errors (2 retries, 5s backoff), verified
+  against the real exception types the SDK raises. The free tier caps out
+  at **20 requests per project per day** (confirmed live elsewhere in
+  this pipeline) — see [`orchestrator/README.md`](../orchestrator/README.md).
 
-**Honest limit:** no `ANTHROPIC_API_KEY` was available to test actual
-sentiment-scoring *quality* on real replies — the plumbing (prompt
-construction, prefill JSON parsing, error handling, DB writes) is real
-and tested; spot-check the first classified batch by hand.
+**Honest limit:** sentiment-scoring *quality* on a large, varied batch of
+real replies is still not proven by a smoke test — spot-check the first
+classified batch by hand.
 
 ## Setup
 
+Uses Google's Gemini API (`google-genai` SDK) instead of the original
+design's Claude, since this pipeline runs at $0 budget and Gemini has a
+genuine free tier.
+
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=AQ...
 ```
 
 ## Flags
@@ -88,8 +99,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 | Flag | Default | Meaning |
 |---|---|---|
 | `--db` | `../sender/sender_state.db` | shared state DB (same one `sender.py`/`reply_watcher.py` write to) |
-| `--api-key` | `ANTHROPIC_API_KEY` env var | only needed for `classify` |
-| `--model` | `claude-sonnet-5` | |
+| `--api-key` | `GEMINI_API_KEY` env var | only needed for `classify` |
+| `--model` | `gemini-3.6-flash` | |
 | `export-few-shot --crawl-dir` | `../crawler/output` | for looking up each domain's `analysis.json` |
 | `export-few-shot --out` | `few_shot.json` | ready for `draft.py --few-shot` |
 | `export-few-shot --limit` | `5` | max examples exported |
@@ -101,4 +112,5 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-22 offline tests. Anthropic API calls mocked at the client boundary.
+25 offline tests. Gemini API calls mocked at the client boundary; also
+verified live against the real API (see above).

@@ -10,7 +10,7 @@ import db as db_module
 import pytest
 from feedback import (
     build_sentiment_prompt,
-    call_claude_sentiment,
+    call_gemini_sentiment,
     classify_reply_sentiment,
     run_sentiment_batch,
     variant_key,
@@ -31,46 +31,99 @@ def conn(tmp_path):
     c.close()
 
 
-# --- build_sentiment_prompt / call_claude_sentiment (mocked, honest) --------------
+# --- build_sentiment_prompt / call_gemini_sentiment (mocked, honest) --------------
 
 def test_build_sentiment_prompt_includes_reply_text():
     prompt = build_sentiment_prompt("Sounds interesting, tell me more.")
     assert "Sounds interesting, tell me more." in prompt
 
 
-@patch("feedback.anthropic.Anthropic")
-def test_call_claude_sentiment_uses_prefill_and_parses_json(mock_anthropic_cls):
+@patch("feedback.genai.Client")
+def test_call_gemini_sentiment_uses_json_mode_and_parses_json(mock_client_cls):
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text='"sentiment": "positive", "confidence": 9, "reasoning": "clear interest"}')]
-    mock_client.messages.create.return_value = mock_response
-    mock_anthropic_cls.return_value = mock_client
+    mock_response.text = json.dumps({"sentiment": "positive", "confidence": 9, "reasoning": "clear interest"})
+    mock_client.models.generate_content.return_value = mock_response
+    mock_client_cls.return_value = mock_client
 
-    result = call_claude_sentiment("prompt", api_key="fake-key", model="claude-sonnet-5")
+    result = call_gemini_sentiment("prompt", api_key="fake-key", model="gemini-3.6-flash")
     assert result["sentiment"] == "positive"
     assert result["confidence"] == 9
 
+    call_kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert call_kwargs["config"].response_mime_type == "application/json"
 
-@patch("feedback.anthropic.Anthropic")
-def test_call_claude_sentiment_handles_api_error(mock_anthropic_cls):
+
+@patch("feedback.genai.Client")
+def test_call_gemini_sentiment_handles_api_error(mock_client_cls):
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = Exception("API down")
-    mock_anthropic_cls.return_value = mock_client
-    result = call_claude_sentiment("prompt", api_key="fake-key", model="claude-sonnet-5")
+    mock_client.models.generate_content.side_effect = Exception("API down")
+    mock_client_cls.return_value = mock_client
+    result = call_gemini_sentiment("prompt", api_key="fake-key", model="gemini-3.6-flash")
     assert result["_api_error"] is True
 
 
-def test_call_claude_sentiment_no_key_skips_call():
-    with patch("feedback.anthropic.Anthropic") as mock_cls:
-        result = call_claude_sentiment("prompt", api_key=None, model="claude-sonnet-5")
+def test_call_gemini_sentiment_no_key_skips_call():
+    with patch("feedback.genai.Client") as mock_cls:
+        result = call_gemini_sentiment("prompt", api_key=None, model="gemini-3.6-flash")
         assert result["_api_error"] is True
         mock_cls.assert_not_called()
 
 
-@patch("feedback.call_claude_sentiment")
+# --- call_gemini_sentiment retry on transient errors ------------------------------
+
+@patch("feedback.time.sleep")
+@patch("feedback.genai.Client")
+def test_call_gemini_sentiment_retries_on_503_then_succeeds(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = json.dumps({"sentiment": "positive", "confidence": 9, "reasoning": "x"})
+    mock_client.models.generate_content.side_effect = [
+        errors.ServerError(503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}}),
+        mock_response,
+    ]
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_sentiment("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["sentiment"] == "positive"
+    assert mock_client.models.generate_content.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+@patch("feedback.time.sleep")
+@patch("feedback.genai.Client")
+def test_call_gemini_sentiment_gives_up_after_max_retries(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = errors.ServerError(
+        503, {"error": {"message": "overloaded", "status": "UNAVAILABLE"}})
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_sentiment("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["_api_error"] is True
+    assert mock_client.models.generate_content.call_count == 3
+
+
+@patch("feedback.time.sleep")
+@patch("feedback.genai.Client")
+def test_call_gemini_sentiment_does_not_retry_non_retryable_error(mock_client_cls, mock_sleep):
+    from google.genai import errors
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = errors.ClientError(
+        400, {"error": {"message": "bad key", "status": "INVALID_ARGUMENT"}})
+    mock_client_cls.return_value = mock_client
+
+    result = call_gemini_sentiment("prompt", api_key="fake-key", model="gemini-3.6-flash")
+    assert result["_api_error"] is True
+    assert mock_client.models.generate_content.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("feedback.call_gemini_sentiment")
 def test_classify_reply_sentiment_returns_scores(mock_call):
     mock_call.return_value = {"sentiment": "positive", "confidence": 9, "reasoning": "clear interest"}
-    result = classify_reply_sentiment("Sounds great, let's talk.", api_key="fake-key", model="claude-sonnet-5")
+    result = classify_reply_sentiment("Sounds great, let's talk.", api_key="fake-key", model="gemini-3.6-flash")
     assert result["sentiment"] == "positive"
 
 
@@ -81,7 +134,7 @@ def test_run_sentiment_batch_classifies_unclassified_replies(mock_classify, conn
     mock_classify.return_value = {"sentiment": "positive", "confidence": 9, "reasoning": "interested"}
     db_module.save_reply(conn, "jane@acme.com", 1, "Re: hi", "Sounds interesting.")
 
-    summary = run_sentiment_batch(conn, api_key="fake-key", model="claude-sonnet-5")
+    summary = run_sentiment_batch(conn, api_key="fake-key", model="gemini-3.6-flash")
 
     assert summary["classified"] == 1
     positive = db_module.get_replies_by_sentiment(conn, "positive")
@@ -93,7 +146,7 @@ def test_run_sentiment_batch_skips_already_classified(mock_classify, conn):
     reply_id = db_module.save_reply(conn, "jane@acme.com", 1, "Re: hi", "Sounds interesting.")
     db_module.update_reply_sentiment(conn, reply_id, "positive", confidence=9)
 
-    run_sentiment_batch(conn, api_key="fake-key", model="claude-sonnet-5")
+    run_sentiment_batch(conn, api_key="fake-key", model="gemini-3.6-flash")
     mock_classify.assert_not_called()
 
 

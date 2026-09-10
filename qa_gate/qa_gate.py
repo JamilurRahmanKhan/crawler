@@ -34,10 +34,12 @@ input, zero reformatting. manual_review.csv is the audit trail -- every
 failure AND every review-sampled pass, with reasons, nothing silently
 discarded.
 
-Honest note on testing: like analyze.py, no ANTHROPIC_API_KEY was
-available in the session that built this. The LLM judge call is fully
-tested with the real Anthropic SDK mocked at the client boundary; the
-judge's actual scoring *quality* is not verified here.
+Uses Google's Gemini API (google-genai SDK), same as analyze.py, at $0
+budget. The LLM judge call is fully tested with the real google-genai
+client mocked at the client boundary, and was ALSO verified live against
+the real Gemini API with a real free-tier key -- the judge's actual
+scoring *quality* on a large, varied batch is still not proven by one
+live smoke test; spot-check the first batch by hand regardless.
 
 Usage:
     python qa_gate.py --queue queue.json --crawl-dir ../crawler/output --dry-run
@@ -51,15 +53,23 @@ import os
 import random
 import re
 import sys
+import time
 from pathlib import Path
 
-import anthropic
+from google import genai
+from google.genai import types
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # optional -- picks up a local .env with GEMINI_API_KEY if python-dotenv is installed
+except ImportError:
+    pass  # fine without it -- just means you set the real env var yourself
 
 log = logging.getLogger("qa_gate")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
                      handlers=[logging.StreamHandler(sys.stdout)])
 
-DEFAULT_MODEL = "claude-sonnet-5"
+DEFAULT_MODEL = "gemini-3.6-flash"
 MAX_BODY_WORDS = 90
 MAX_READING_GRADE = 8
 GROUNDING_THRESHOLD = 8
@@ -290,32 +300,54 @@ def build_judge_prompt(item: dict, analysis: dict = None) -> str:
     )
 
 
-def call_claude_judge(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
-    """Never raises. Same prefill-JSON technique as analyze.py's extraction
-    call, for the same reliability reason."""
+RETRYABLE_STATUS_CODES = {429, 503}  # rate limit / transient overload, hit
+# live for real during this project (a genuine 503 from Google's side)
+MAX_RETRIES = 2
+RETRY_BACKOFF_SEC = 5
+
+
+def call_gemini_judge(prompt: str, api_key: str, model: str = DEFAULT_MODEL) -> dict:
+    """Never raises. Uses Gemini's native JSON mode, same as analyze.py's
+    extraction call -- no prefill hack needed. max_output_tokens is 4096,
+    not the tiny judge-response size (6 fields) alone -- gemini-3.6-flash
+    is a reasoning model that spends part of this same budget on invisible
+    "thinking" tokens before writing the visible JSON (real bug hit and
+    fixed live in analyze.py first: too small a budget silently truncates
+    the response mid-object). Retries transient 429/503 errors with a
+    fixed backoff before giving up."""
     if not api_key:
         return {"_api_error": True, "_error_detail": "no API key provided"}
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=model,
-            max_tokens=512,
-            messages=[
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": "{"},
-            ],
-        )
-        raw_text = "{" + response.content[0].text
-        cleaned = re.sub(r"^```(?:json)?\s*", "", raw_text.strip())
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        return json.loads(cleaned)
-    except Exception as e:
-        return {"_api_error": True, "_error_detail": str(e)}
+    last_error = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=4096,
+                ),
+            )
+            cleaned = re.sub(r"^```(?:json)?\s*", "", response.text.strip())
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+            return json.loads(cleaned)
+        except genai.errors.APIError as e:
+            last_error = e
+            if e.code not in RETRYABLE_STATUS_CODES or attempt == MAX_RETRIES:
+                break
+            log.warning(f"Gemini call failed ({e.code} {e.status}), retrying "
+                        f"in {RETRY_BACKOFF_SEC}s (attempt {attempt + 1}/{MAX_RETRIES})")
+            time.sleep(RETRY_BACKOFF_SEC)
+        except Exception as e:
+            last_error = e
+            break
+    return {"_api_error": True, "_error_detail": str(last_error)}
 
 
 def judge_email(item: dict, analysis: dict, api_key: str, model: str = DEFAULT_MODEL) -> dict:
     prompt = build_judge_prompt(item, analysis)
-    return call_claude_judge(prompt, api_key=api_key, model=model)
+    return call_gemini_judge(prompt, api_key=api_key, model=model)
 
 
 def should_pass(scores: dict) -> bool:
@@ -351,6 +383,54 @@ def save_review_state(state_path: str, count: int):
 
 
 # ---------------------------------------------------------------------------
+# Judge-feedback redraft loop (opt-in via --offer-config) -- one automatic
+# retry using the judge's own specific rejection reason, before an item
+# ever reaches manual review. draft.py is imported LAZILY (inside the
+# function, not at module top) so qa_gate.py stays importable/usable on
+# its own even where draft.py isn't present -- this project's own README
+# for this stage states qa_gate "doesn't need Draft to exist to be
+# complete"; the redraft is an enhancement, not a hard dependency.
+# ---------------------------------------------------------------------------
+
+def find_contact(crawl_dir: Path, domain: str, email: str) -> dict:
+    contacts_path = Path(crawl_dir) / domain / "contacts.json"
+    if contacts_path.exists():
+        try:
+            data = json.loads(contacts_path.read_text(encoding="utf-8"))
+            for c in data.get("contacts", []) or []:
+                if (c.get("email") or "").strip().lower() == email.strip().lower():
+                    return c
+        except Exception:
+            pass
+    return {"email": email, "matched_name": None, "matched_title": None}
+
+
+def redraft_sequence_with_feedback(domain: str, email: str, analysis: dict, offer_config: dict,
+                                    feedback: str, api_key: str, model: str, crawl_dir: Path) -> list:
+    """Returns a freshly drafted 4-step sequence (draft_lead's own item
+    shape, ready to re-check) or [] if draft.py isn't importable or the
+    redraft call itself fails -- never raises, matches every other
+    graceful-degrade pattern in this project."""
+    try:
+        sys.path.insert(0, str(Path(__file__).parent.parent / "draft"))
+        import draft as draft_module
+    except ImportError:
+        return []
+    contact = find_contact(crawl_dir, domain, email)
+    return draft_module.draft_lead(contact, analysis, offer_config, api_key=api_key, model=model,
+                                    previous_feedback=feedback)
+
+
+def _evaluate_sequence(items: list, analysis: dict, api_key: str, model: str, reviewed_so_far: int):
+    results = []
+    for item in items:
+        result = qa_check_item(item, analysis, api_key, model, reviewed_so_far)
+        reviewed_so_far += 1
+        results.append(result)
+    return results, reviewed_so_far
+
+
+# ---------------------------------------------------------------------------
 # Per-item orchestration
 # ---------------------------------------------------------------------------
 
@@ -380,47 +460,72 @@ def qa_check_item(item: dict, analysis: dict, api_key: str, model: str, reviewed
 # ---------------------------------------------------------------------------
 
 def run_batch(queue_path: str, crawl_dir: str, out_passed: str, out_review_csv: str,
-              api_key: str, model: str = DEFAULT_MODEL, state_path: str = "qa_review_state.json") -> dict:
+              api_key: str, model: str = DEFAULT_MODEL, state_path: str = "qa_review_state.json",
+              offer_config_path: str = None) -> dict:
     queue = json.loads(Path(queue_path).read_text(encoding="utf-8"))
     crawl_dir = Path(crawl_dir)
     reviewed_so_far = load_review_state(state_path)
+    offer_config = (json.loads(Path(offer_config_path).read_text(encoding="utf-8"))
+                    if offer_config_path else None)
 
     summary = {"total": len(queue), "passed": 0, "failed_automated": 0,
-               "failed_judge": 0, "needs_review": 0}
+               "failed_judge": 0, "needs_review": 0, "redrafted": 0}
     passed_items = []
     review_rows = []
 
+    # group by (domain, email) preserving first-appearance order -- a judge
+    # failure on step 1 triggers ONE redraft of the whole 4-step sequence
+    # (draft.py generates all 4 as one coherent thread; redrafting a single
+    # step in isolation would break steps 2-4's continuity), not a redraft
+    # per individual step.
+    groups = {}
     for item in queue:
         domain = item.get("domain") or item.get("to_email", "").split("@", 1)[-1]
+        key = (domain, (item.get("to_email") or "").strip().lower())
+        groups.setdefault(key, []).append(item)
+
+    for (domain, email), items in groups.items():
         analysis_path = crawl_dir / domain / "analysis.json"
         analysis = json.loads(analysis_path.read_text(encoding="utf-8")) if analysis_path.exists() else None
 
-        result = qa_check_item(item, analysis, api_key, model, reviewed_so_far)
-        reviewed_so_far += 1
+        results, reviewed_so_far = _evaluate_sequence(items, analysis, api_key, model, reviewed_so_far)
 
-        scores = result["judge_scores"] or {}
-        row = {
-            "to_email": item.get("to_email", ""), "domain": domain, "step": item.get("step", ""),
-            "subject": item.get("subject", ""), "verdict": result["verdict"],
-            "violations": "; ".join(result["violations"]),
-            "judge_overall": scores.get("overall", ""),
-        }
+        step1_result = next((r for i, r in zip(items, results) if i.get("step") == 1), None)
+        if offer_config and step1_result and step1_result["verdict"] == "fail_judge":
+            feedback = (step1_result["judge_scores"] or {}).get("feedback", "")
+            redrafted = redraft_sequence_with_feedback(
+                domain, email, analysis, offer_config, feedback=feedback,
+                api_key=api_key, model=model, crawl_dir=crawl_dir)
+            if redrafted:
+                new_results, reviewed_so_far = _evaluate_sequence(redrafted, analysis, api_key, model, reviewed_so_far)
+                items, results = redrafted, new_results
+                summary["redrafted"] += 1
+                log.info(f"[{email}] step 1 failed judge ({feedback!r}) -- redrafted sequence")
 
-        if result["verdict"] == "pass":
-            passed_items.append(item)
-            summary["passed"] += 1
-            if result["needs_human_review"]:
-                summary["needs_review"] += 1
-                review_rows.append(row)
-        else:
-            if result["verdict"] == "fail_automated":
-                summary["failed_automated"] += 1
+        for item, result in zip(items, results):
+            scores = result["judge_scores"] or {}
+            row = {
+                "to_email": item.get("to_email", ""), "domain": domain, "step": item.get("step", ""),
+                "subject": item.get("subject", ""), "verdict": result["verdict"],
+                "violations": "; ".join(result["violations"]),
+                "judge_overall": scores.get("overall", ""),
+            }
+
+            if result["verdict"] == "pass":
+                passed_items.append(item)
+                summary["passed"] += 1
+                if result["needs_human_review"]:
+                    summary["needs_review"] += 1
+                    review_rows.append(row)
             else:
-                summary["failed_judge"] += 1
-            review_rows.append(row)
+                if result["verdict"] == "fail_automated":
+                    summary["failed_automated"] += 1
+                else:
+                    summary["failed_judge"] += 1
+                review_rows.append(row)
 
-        log.info(f"[{row['to_email']}] {result['verdict']}"
-                 + (f" -- {result['violations']}" if result["violations"] else ""))
+            log.info(f"[{row['to_email']}] {result['verdict']}"
+                     + (f" -- {result['violations']}" if result["violations"] else ""))
 
     save_review_state(state_path, reviewed_so_far)
 
@@ -439,23 +544,28 @@ def main():
     ap = argparse.ArgumentParser(description="Stage 6: QA gate -- validate drafted emails before sending.")
     ap.add_argument("--queue", required=True, help="JSON queue of drafted emails (same shape sender.py --queue expects)")
     ap.add_argument("--crawl-dir", default="../crawler/output", help="for looking up each domain's analysis.json")
-    ap.add_argument("--api-key", default=os.environ.get("ANTHROPIC_API_KEY"))
+    ap.add_argument("--api-key", default=os.environ.get("GEMINI_API_KEY"))
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--passed-out", default="queue_passed.json", help="ready for sender.py --queue")
     ap.add_argument("--review-out", default="manual_review.csv", help="failures + review-sampled passes, audit trail")
     ap.add_argument("--state-path", default="qa_review_state.json", help="persists the review-sampling counter across runs")
+    ap.add_argument("--offer-config", default=None,
+                     help="enables one automatic redraft (via draft.py) when step 1 fails the judge, "
+                          "using the judge's own feedback -- omit to disable (default)")
     args = ap.parse_args()
 
     if not args.api_key:
-        raise SystemExit("No API key. Set ANTHROPIC_API_KEY or pass --api-key.")
+        raise SystemExit("No API key. Set GEMINI_API_KEY or pass --api-key.")
 
     summary = run_batch(args.queue, args.crawl_dir, args.passed_out, args.review_out,
-                         api_key=args.api_key, model=args.model, state_path=args.state_path)
+                         api_key=args.api_key, model=args.model, state_path=args.state_path,
+                         offer_config_path=args.offer_config)
 
     print(f"Total:            {summary['total']}")
     print(f"Passed:           {summary['passed']}  -> {args.passed_out}")
     print(f"Failed automated: {summary['failed_automated']}")
     print(f"Failed judge:     {summary['failed_judge']}")
+    print(f"Redrafted:        {summary['redrafted']}")
     print(f"Flagged for human review (subset of passed + all failures): {summary['needs_review']}")
     print(f"Review audit trail: {args.review_out}")
     print(f"\nNext: python ../sender/sender.py --queue {args.passed_out} --dry-run")

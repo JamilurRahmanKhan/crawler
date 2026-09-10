@@ -1,5 +1,5 @@
 {
-  "_comment": "EXAMPLE ONLY -- copy to pipeline_config.json and fill in your real values. Never commit a real api_key here; use --api-key or the ANTHROPIC_API_KEY env var instead and leave this field out.",
+  "_comment": "EXAMPLE ONLY -- copy to pipeline_config.json and fill in your real values. Never commit a real api_key here; use --api-key or the GEMINI_API_KEY env var instead and leave this field out.",
 
   "input_csv": "leads.csv",
   "url_column": "website",
